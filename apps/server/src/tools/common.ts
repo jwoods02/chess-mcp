@@ -10,8 +10,6 @@ export interface ToolDeps {
   store: GameStore;
   /** Present only when a Jev API key is configured. */
   jev?: Opponent;
-  /** False in live board mode, where one board per game updates itself. */
-  movesShowBoard: boolean;
 }
 
 export const gameIdInput = z.string().describe('Game ID returned by new_game');

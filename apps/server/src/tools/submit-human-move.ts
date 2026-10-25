@@ -9,7 +9,7 @@ import { changeGame, gameIdInput, gameResult, handle, plyInput, type ToolDeps } 
 // (make_move) shows the board with both moves. Games against Jev use play_against_jev instead,
 // because Jev's reply comes back in the same call and the human needs to see it. The board itself
 // calls this when the human drags a piece, so it's marked as callable from the board.
-export function registerSubmitHumanMove(server: McpServer, { store, movesShowBoard }: ToolDeps) {
+export function registerSubmitHumanMove(server: McpServer, { store }: ToolDeps) {
   server.registerTool(
     'submit_human_move',
     {
@@ -40,10 +40,9 @@ export function registerSubmitHumanMove(server: McpServer, { store, movesShowBoa
           return applyMove(g, move, 'human');
         });
         // Only the model sees this result, so if a human has to look at the new position, it should
-        // show it. Not needed in live mode, where the board updates itself.
+        // show it.
         const view = toView(game);
-        const humanMustSee =
-          movesShowBoard && (view.status === 'finished' || view.toMove === 'human');
+        const humanMustSee = view.status === 'finished' || view.toMove === 'human';
         return gameResult(
           game,
           humanMustSee

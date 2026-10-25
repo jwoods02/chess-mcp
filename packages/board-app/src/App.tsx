@@ -1,7 +1,7 @@
 import type { GameView } from '@chess-mcp/shared';
 import { useApp, useHostStyles, type App as McpApp } from '@modelcontextprotocol/ext-apps/react';
 import { Chess } from 'chess.js';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import {
   Chessboard,
   defaultPieces,
@@ -12,11 +12,6 @@ import {
 
 type ToolResult = Awaited<ReturnType<McpApp['callServerTool']>>;
 
-// Set by the server. In live mode this board stays up to date by polling instead of a new board
-// being drawn for every move.
-const LIVE =
-  document.querySelector<HTMLMetaElement>('meta[name="chess-board-mode"]')?.content === 'live';
-const POLL_MS = 1500;
 // How long to wait for the host to run a tool call before posting the move as a message instead.
 // Longer than the server's worst case against Jev (two 2.5s attempts, then a random move).
 const SEND_TIMEOUT_MS = 8000;
@@ -52,13 +47,12 @@ function App() {
     },
   });
   useHostStyles(app, app?.getHostContext());
-  useLiveUpdates(app, view, setView);
 
   if (error) return <p>Could not connect to the host: {error.message}</p>;
   if (!view || !app) return <p>Loading game…</p>;
 
   // A dropped piece is shown on its new square until the server answers. It only applies to the
-  // position it was dropped on, so any newer position (a reply, or a poll in live mode) replaces it.
+  // position it was dropped on, so any newer position replaces it.
   const pending = dropped?.ply === view.ply ? dropped.position : undefined;
   const setPending = (position: PositionDataType | undefined) =>
     setDropped(position && { ply: view.ply, position });
@@ -222,28 +216,6 @@ function tryLocalMove(
   } catch {
     return undefined;
   }
-}
-
-/** Live mode: poll for moves made elsewhere (the assistant's replies, or moves typed in chat). */
-function useLiveUpdates(
-  app: McpApp | null,
-  view: GameView | undefined,
-  setView: (v: GameView) => void,
-) {
-  const gameId = view?.gameId;
-  const ply = view?.ply;
-  const active = view?.status === 'active';
-  useEffect(() => {
-    if (!LIVE || !app || !gameId || !active) return;
-    const timer = setInterval(async () => {
-      const result = await app
-        .callServerTool({ name: 'board_state', arguments: { gameId } })
-        .catch(() => undefined);
-      const latest = result?.structuredContent as GameView | undefined;
-      if (latest && (latest.ply !== ply || latest.status !== 'active')) setView(latest);
-    }, POLL_MS);
-    return () => clearInterval(timer);
-  }, [app, gameId, ply, active, setView]);
 }
 
 function PromotionPicker(props: {

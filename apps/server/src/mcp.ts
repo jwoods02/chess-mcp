@@ -1,10 +1,9 @@
 import { EXTENSION_ID, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer } from '@modelcontextprotocol/server';
-import { registerBoardUi, type BoardMode } from './board-ui.ts';
+import { registerBoardUi } from './board-ui.ts';
 import type { Opponent } from './opponents/opponent.ts';
 import type { GameStore } from './store/store.ts';
 import type { ToolDeps } from './tools/common.ts';
-import { registerBoardState } from './tools/board-state.ts';
 import { registerDrawOffer } from './tools/draw-offer.ts';
 import { registerGetGame } from './tools/get-game.ts';
 import { registerLegalMoves } from './tools/legal-moves.ts';
@@ -30,10 +29,9 @@ export interface ServerOptions {
   store: GameStore;
   /** Present only when a TypeSafe API key is configured. */
   jev?: Opponent;
-  boardMode?: BoardMode;
 }
 
-export function buildMcpServer({ store, jev, boardMode = 'per-round' }: ServerOptions) {
+export function buildMcpServer({ store, jev }: ServerOptions) {
   const instructions = [...INSTRUCTIONS, ...(jev ? [JEV_INSTRUCTIONS] : [])].join('\n');
   const server = new McpServer(
     { name: 'chess-mcp', version: '0.0.0' },
@@ -45,11 +43,9 @@ export function buildMcpServer({ store, jev, boardMode = 'per-round' }: ServerOp
     },
   );
 
-  // In live mode the board updates itself, so moves don't draw a new one.
-  const deps: ToolDeps = { store, jev, movesShowBoard: boardMode === 'per-round' };
+  const deps: ToolDeps = { store, jev };
 
-  registerBoardUi(server, boardMode);
-  registerBoardState(server, deps);
+  registerBoardUi(server);
   registerNewGame(server, deps);
   registerGetGame(server, deps);
   registerMakeMove(server, deps);

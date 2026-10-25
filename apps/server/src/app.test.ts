@@ -59,16 +59,14 @@ test('tells the model how to talk about the game', async () => {
 
 type ToolInfo = { name: string; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } };
 
-/** Tools the model sees (not app-only), and which of those draw the board. */
+/** The tools, their names, and which of them draw the board. */
 async function listTools(server: ReturnType<typeof createApp> = app) {
   const { result } = await rpc('tools/list', {}, server);
-  const forModel = (result.tools as ToolInfo[]).filter(
-    (t) => !t._meta?.ui?.visibility?.every((v) => v === 'app'),
-  );
+  const tools = result.tools as ToolInfo[];
   return {
-    all: result.tools as ToolInfo[],
-    names: forModel.map((t) => t.name).sort(),
-    showBoard: forModel
+    tools,
+    names: tools.map((t) => t.name).sort(),
+    showBoard: tools
       .filter((t) => t._meta?.ui?.resourceUri === BOARD_URI)
       .map((t) => t.name)
       .sort(),
@@ -88,25 +86,14 @@ test('lists the game tools, showing the board only when a human needs to see a n
     'undo_move',
   ]);
   expect(tools.showBoard).toEqual(['get_game', 'make_move', 'new_game', 'undo_move']);
-  // The board UI polls board_state; the model never sees it.
-  expect(tools.all.find((t) => t.name === 'board_state')?._meta?.ui?.visibility).toEqual(['app']);
 });
 
-test('marks the tools the board calls itself as callable from the board', async () => {
+test('marks submit_human_move as callable from the board, without drawing one', async () => {
   // The spec allows this by default, but we mark it explicitly for stricter hosts.
-  const { all } = await listTools();
-  for (const name of ['submit_human_move', 'board_state']) {
-    expect(all.find((t) => t.name === name)?._meta?.ui?.visibility).toContain('app');
-  }
-  expect(all.find((t) => t.name === 'submit_human_move')?._meta?.ui?.resourceUri).toBeUndefined();
-});
-
-test('in live board mode only starting or showing a game draws a board', async () => {
-  const live = createApp({ store: new SqliteStore(':memory:'), boardMode: 'live' });
-  expect((await listTools(live)).showBoard).toEqual(['get_game', 'new_game']);
-
-  const read = await rpc('resources/read', { uri: BOARD_URI }, live);
-  expect(read.result.contents[0].text).toContain('<meta name="chess-board-mode" content="live" />');
+  const { tools } = await listTools();
+  const submit = tools.find((t) => t.name === 'submit_human_move');
+  expect(submit?._meta?.ui?.visibility).toContain('app');
+  expect(submit?._meta?.ui?.resourceUri).toBeUndefined();
 });
 
 test('plays a game to checkmate through the tools', async () => {
@@ -208,8 +195,7 @@ describe('playing Jev', () => {
 
   test("the human's move against Jev has its own tool, which shows the board", async () => {
     const server = withJev('e5');
-    const { all } = await listTools(server);
-    expect(all.find((t) => t.name === 'play_against_jev')?._meta?.ui?.resourceUri).toBe(BOARD_URI);
+    expect((await listTools(server)).showBoard).toContain('play_against_jev');
     expect((await listTools()).names).not.toContain('play_against_jev');
 
     const vsJev = await callTool('new_game', { white: 'human', black: 'jev' }, server);
