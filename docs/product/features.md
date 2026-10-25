@@ -56,7 +56,7 @@ Add a non-LLM AI opponent so that the LLM can _coach_ instead of _play_.
   best one. These are experiments, listed under
   [opponent settings](./coaching-modes.md#opponent-settings-later-experiments).
 - Modes: **human vs Jev with the LLM as coach** and LLM vs Jev (built). Jev vs Jev needs a stepping tool
-  (later). Coaching while you play Jev is the next design question.
+  (later). Coaching while you play Jev is designed in [coaching modes](./coaching-modes.md#when-the-coach-gets-a-turn).
 
 > **About Jev:** TypeSafe AI's _System One_ model. It is not an LLM: it takes a state plus typed
 > questions (`choice`, yes/no, `score`) and returns calibrated probabilities in a single pass. It is
@@ -77,9 +77,16 @@ Add a non-LLM AI opponent so that the LLM can _coach_ instead of _play_.
   server only enforces legality.
 - Puzzles are stored, so they can be replayed or shared and attempts are tracked.
 
-## M5 — Coaching modes
+## M5 — Coaching modes (next, ahead of M4)
 
-A pluggable set of teaching styles that wrap any game or puzzle. See [coaching-modes.md](./coaching-modes.md).
+A pluggable set of teaching styles that wrap any game or puzzle. We build it before puzzles, because
+puzzles reuse it (`puzzle_coach`) and a new-game screen needs modes to offer. See
+[coaching-modes.md](./coaching-modes.md).
+
+- The server supplies checked facts after each move and a `preview_move` calculator; modes are mostly
+  prompt text; the server decides when the coach speaks.
+- Start with a few modes from the candidates, chosen after prompt-only playtests.
+- Then a new-game setup screen (opponent, colour, coaching mode) and MCP prompts per mode.
 
 ## Later / ideas
 

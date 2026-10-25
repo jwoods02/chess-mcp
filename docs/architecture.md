@@ -45,12 +45,13 @@ chess-mcp/
 │        ├─ tools/            # one file per tool
 │        ├─ chess/
 │        │  ├─ game.ts        # create game, apply move, end game, build GameView (wraps chess.js)
-│        │  └─ text.ts        # ASCII board + text tool response
+│        │  ├─ text.ts        # ASCII board + text tool response
+│        │  └─ facts.ts       # M5: checked facts about a move/position, for coaching
 │        ├─ store/
 │        │  ├─ store.ts       # GameStore interface
 │        │  └─ sqlite.ts      # better-sqlite3 implementation (tests use `:memory:`)
 │        ├─ opponents/        # Jev
-│        └─ coaching/         # M5: coaching modes
+│        └─ coaching/         # M5: one file per coaching mode
 ├─ packages/
 │  ├─ board-app/              # MCP App UI → builds to dist/index.html
 │  └─ shared/                 # zod schemas + types shared by server and UI (GameView etc.)
@@ -112,7 +113,7 @@ interface Game {
     | 'resignation'
     | 'draw_agreed';
   drawOffer?: Color; // a pending draw offer made by this side
-  coachingMode?: string; // M5, e.g. 'socratic@1'
+  coachingMode?: string; // M5, e.g. 'blunder_check@1'; games without one play as 'play@1'
   createdAt: string;
   updatedAt: string;
 }
@@ -251,7 +252,7 @@ interface GameView {
     jev?: { topMoves: Record<string, number>; fallback?: string }; // when Jev moved
   };
   orientation: Color; // board orientation for the UI: the human's colour
-  coaching?: CoachingBlock; // M5
+  coaching?: CoachingBlock; // M5: see Coaching modes
 }
 ```
 
@@ -351,7 +352,8 @@ move tool for the side to move), `wrong_tool` (e.g. `submit_human_move` in a gam
 | M4        | `build_position`     | `{ pieces: { square, piece, color }[], sideToMove }` or `{ fen }` returns a valid FEN or a list of problems (missing king, pawn on the back rank, side not to move in check…). LLMs are unreliable at writing FENs, so this is how they "describe a board". |
 | M4        | `create_puzzle`      | `{ fen, prompt, solution?: string[], hints?: string[] }`. Validates that the solution is legal. Shows the board.                                                                                                                                            |
 | M4        | `submit_puzzle_move` | `{ puzzleId, move }` returns `{ legal, verdict: 'correct' \| 'incorrect' \| 'open' }` plus coaching. `open` = no fixed solution, so the LLM judges.                                                                                                         |
-| M5        | `set_coaching_mode`  | `{ gameId, mode }`                                                                                                                                                                                                                                          |
+| M5        | `set_coaching_mode`  | `{ gameId, ply, mode }`: switch the coaching mode mid-game. Text only.                                                                                                                                                                                      |
+| M5        | `preview_move`       | `{ gameId, moves: string[] }`: plays a move or short line on a scratch copy of the game and returns the facts, without changing it. The LLM's calculator for checking a claim before making it. Text only.                                                  |
 
 ## MCP App (board UI)
 
@@ -466,35 +468,59 @@ TypeSafe's System One API directly. Using the AI SDK keeps the door open to othe
 
 ## Coaching modes (M5)
 
-The server decides _when_ to coach and _which facts_ are relevant. The LLM writes the words.
+Product side: [coaching modes](./product/coaching-modes.md). The split is:
+
+- **The server** computes facts it can check (chess.js now, an engine later) and decides _when_ the
+  coach should speak.
+- **A mode** is mostly prompt text: guidance for the LLM per event, which facts to show, and when to
+  speak.
+- **The LLM** writes every word the human reads. It doesn't read tactics off the board: it uses the
+  facts, and checks any other concrete claim with `preview_move`.
 
 ```ts
 // coaching/mode.ts
+type CoachingEvent = 'game_started' | 'after_move' | 'game_over';
+
 interface CoachingMode {
-  id: string; // 'socratic'
-  version: number; // recorded on the game as 'socratic@1'
+  id: string; // 'blunder_check'
+  version: number; // recorded on the game as 'blunder_check@1'
+  label: string; // for tool descriptions and, later, the setup screen
   description: string;
-  allowsUndo: boolean;
-  /** Returns guidance for the LLM at this point in the game, or nothing. */
-  coach(
-    event: 'game_started' | 'human_to_move' | 'move_played' | 'game_over',
-    game: GameView,
-    facts: PositionFacts,
-  ): CoachingBlock | undefined;
+  showJevChoices: boolean; // false in 'play', so the LLM can't volunteer them
+  /** What the LLM should do now, and whether the coach should speak, or nothing. */
+  coach(event: CoachingEvent, facts: MoveFacts, view: GameView): CoachingBlock | undefined;
 }
 
 interface CoachingBlock {
-  mode: string; // 'socratic@1'
-  guidance: string; // instructions for the LLM, not shown in the UI
-  facts?: Record<string, unknown>;
+  mode: string; // 'blunder_check@1'
+  guidance: string; // instructions for the LLM, never shown on the board
+  speak: boolean; // the coach has something to say now
+  facts: MoveFacts;
 }
 ```
 
-- One file per mode in `coaching/modes/`, plus a plain object map as the registry.
-- The block is appended to the text response under `Coach notes (for the assistant):` and included in
-  `GameView.coaching`.
-- `PositionFacts` start with what chess.js provides cheaply (material, checks, captures, attacked
-  pieces). An engine can add evaluation later without changing the modes.
+- **One file per mode** in `coaching/modes/`, with a plain object map as the registry. A mode is
+  mostly text, so changing its wording means bumping its version.
+- **The event comes from the game**, not from each tool: `gameResult()` (the one place every tool
+  result passes through) sees whether the game just started, a move was just played or the game ended,
+  asks the game's mode, and appends the block to the text under `Coach notes (for the assistant):` and
+  to `GameView.coaching`. Tools don't change.
+- **Facts** (`chess/facts.ts`, pure functions, unit tested) describe the last move and the position
+  after it, for both sides: what the move did, material, undefended pieces or pieces attacked by a
+  cheaper one, the opponent's captures and checks, and what the mover missed (mate in one, a free
+  capture). Against Jev, also how likely Jev rated the human's move. An engine can add evaluation
+  later without changing the modes.
+- **`preview_move`** runs the same facts on a scratch copy of the game. Server instructions ask the LLM
+  to back concrete claims ("this hangs the bishop") with the facts or a preview.
+- **Coach after the move, never block it.** On some paths the board has already played the move before
+  the LLM hears about it, so a mode offers a takeback (`undo_move`) rather than an "are you sure?"
+  prompt. This keeps coaching the same on every path.
+- **Speaking in Jev games.** Against Jev the LLM gets no turn after a dragged move. When
+  `coaching.speak` is true, the board posts its chat message ("I played e4.") anyway, which gives the
+  coach a turn. Otherwise it stays quiet, as it does now.
+- **Choosing a mode:** `new_game` takes an optional `coaching` mode id (default `play`), and
+  `set_coaching_mode` switches it mid-game. Opponent settings (how Jev or the LLM plays) are a separate,
+  later setting with the same `id@version` recording.
 
 ## Testing
 
@@ -516,18 +542,20 @@ interface CoachingBlock {
 
 ## Decisions
 
-| #   | Decision                                                                                  | Why                                                                                                     |
-| --- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| 1   | Hono plus the official `@modelcontextprotocol/hono`                                       | First-party SDK support, small, web-standard.                                                           |
-| 2   | Stateless MCP transport, games in a DB keyed by UUID                                      | The model and UI share state through the server. Simple.                                                |
-| 3   | Game = `startFen + moves`. FEN is derived.                                                | Needed for repetition detection, and it's a single source of truth.                                     |
-| 4   | `better-sqlite3`, one table, JSON column, no ORM or migrations framework                  | Least code that works. The `GameStore` interface allows swapping later.                                 |
-| 5   | Three packages: `server`, `board-app`, `shared`                                           | UI is separate, as required. Everything else stays in the server until it needs to move.                |
-| 6   | Every tool returns full text **and** `structuredContent`                                  | Text-only clients are first-class.                                                                      |
-| 7   | Mutating tools require the `ply` the caller saw; saves are conditional on the loaded game | `ply` catches stale views; comparing the stored game catches racing writes, including same-ply changes. |
-| 8   | React with `react-chessboard`                                                             | MIT, inline SVG pieces, drag/drop for the stretch goal.                                                 |
-| 9   | Engine replies are played inside the move call that hands them the turn                   | One call per human move. Simpler for the model and the UI.                                              |
-| 10  | No auth. Game UUIDs are the only identifier.                                              | Out of scope for v1.                                                                                    |
-| 11  | Local only, no deploy                                                                     | Focus on the product first.                                                                             |
-| 12  | Separate `make_move` (assistant) and `submit_human_move` (human) tools                    | Board-linking is per tool; the human's own move shouldn't redraw the board.                             |
-| 13  | Separate `play_against_jev` tool for the human's moves against Jev                        | Jev's reply arrives in the same call, so the board must show; per-tool linking forces a separate tool.  |
+| #   | Decision                                                                                            | Why                                                                                                     |
+| --- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 1   | Hono plus the official `@modelcontextprotocol/hono`                                                 | First-party SDK support, small, web-standard.                                                           |
+| 2   | Stateless MCP transport, games in a DB keyed by UUID                                                | The model and UI share state through the server. Simple.                                                |
+| 3   | Game = `startFen + moves`. FEN is derived.                                                          | Needed for repetition detection, and it's a single source of truth.                                     |
+| 4   | `better-sqlite3`, one table, JSON column, no ORM or migrations framework                            | Least code that works. The `GameStore` interface allows swapping later.                                 |
+| 5   | Three packages: `server`, `board-app`, `shared`                                                     | UI is separate, as required. Everything else stays in the server until it needs to move.                |
+| 6   | Every tool returns full text **and** `structuredContent`                                            | Text-only clients are first-class.                                                                      |
+| 7   | Mutating tools require the `ply` the caller saw; saves are conditional on the loaded game           | `ply` catches stale views; comparing the stored game catches racing writes, including same-ply changes. |
+| 8   | React with `react-chessboard`                                                                       | MIT, inline SVG pieces, drag/drop for the stretch goal.                                                 |
+| 9   | Engine replies are played inside the move call that hands them the turn                             | One call per human move. Simpler for the model and the UI.                                              |
+| 10  | No auth. Game UUIDs are the only identifier.                                                        | Out of scope for v1.                                                                                    |
+| 11  | Local only, no deploy                                                                               | Focus on the product first.                                                                             |
+| 12  | Separate `make_move` (assistant) and `submit_human_move` (human) tools                              | Board-linking is per tool; the human's own move shouldn't redraw the board.                             |
+| 13  | Separate `play_against_jev` tool for the human's moves against Jev                                  | Jev's reply arrives in the same call, so the board must show; per-tool linking forces a separate tool.  |
+| 14  | Coaching facts come from the server; the LLM writes the words and checks claims with `preview_move` | LLMs misread boards with full confidence, and a wrong "you blundered" undermines the coach.             |
+| 15  | Coach after a move and offer a takeback; never block a move                                         | On some host paths the move is played before the LLM hears about it. One rule works everywhere.         |
