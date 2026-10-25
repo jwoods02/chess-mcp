@@ -1,6 +1,9 @@
+import { Level } from '@chess-mcp/shared';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { ChessError, toState, type Game } from '../chess/game.ts';
+import { coachingBlock, MODE_IDS, MODES } from '../coaching/coaching.ts';
+import { LEVELS } from '../opponents/levels.ts';
 import { gameText, gameView } from '../chess/text.ts';
 import type { Opponent } from '../opponents/opponent.ts';
 import type { GameStore } from '../store/store.ts';
@@ -21,12 +24,30 @@ export const plyInput = z
     'The `ply` from the latest result for this game. Guards against acting on an old position.',
   );
 
+export const coachingInput = z
+  .enum(MODE_IDS)
+  .describe(
+    'How the human is coached. ' +
+      MODE_IDS.map((id) => `"${id}": ${MODES[id].description}`).join(' '),
+  );
+export const levelInput = Level.describe(
+  'How strongly the non-human side plays (you or Jev). ' +
+    Level.options
+      .map((l) => `"${l}"${LEVELS[l].rating ? ` (about ${LEVELS[l].rating})` : ''}`)
+      .join(', ') +
+    '. Pick one to suit the human, so they win about half their games.',
+);
+
 /**
  * A successful result: the text response plus the GameView as structured content. Both carry the
- * board and the next step, since some clients show the model only one of them.
+ * board, the next step and the coaching, since some clients show the model only one of them. Ask for
+ * `fullGuidance` when the model may not know the game's coaching yet: a start, resume or change.
  */
-export function gameResult(game: Game, note?: string): CallToolResult {
-  const view = gameView(toState(game), note);
+export function gameResult(
+  game: Game,
+  { note, fullGuidance = false }: { note?: string; fullGuidance?: boolean } = {},
+): CallToolResult {
+  const view = gameView(toState(game), coachingBlock(game, fullGuidance), note);
   return { content: [{ type: 'text', text: gameText(view) }], structuredContent: view };
 }
 
@@ -65,7 +86,7 @@ export async function handle(
     const message = `Error [${error.code}]: ${error.message}`;
     const game = gameId ? await store.get(gameId) : undefined;
     if (!game) return { isError: true, content: [{ type: 'text', text: message }] };
-    const view = gameView(toState(game));
+    const view = gameView(toState(game), coachingBlock(game));
     return {
       isError: true,
       content: [{ type: 'text', text: `${message}\n\nCurrent position:\n${gameText(view)}` }],

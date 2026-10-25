@@ -84,6 +84,7 @@ test('lists the game tools, showing the board only when a human needs to see a n
     'resign_game',
     'submit_human_move',
     'undo_move',
+    'update_game_settings',
   ]);
   expect(tools.showBoard).toEqual(['get_game', 'make_move', 'new_game', 'undo_move']);
 });
@@ -168,6 +169,66 @@ test('reports an unknown game', async () => {
   });
 });
 
+describe('coaching', () => {
+  test('blunder check stays quiet until a move matters, then says why with checked facts', async () => {
+    const start = await callTool('new_game', {
+      white: 'human',
+      black: 'llm',
+      coaching: 'blunder_check',
+    });
+    const { gameId } = start.structuredContent;
+    // A new game carries the full guidance; later results only the one-line summary.
+    expect(start.structuredContent.coaching).toMatchObject({
+      mode: 'blunder_check@1',
+      speak: false,
+    });
+    expect(start.structuredContent.coaching.guidance).toContain('blunder check');
+
+    const quiet = await callTool('submit_human_move', { gameId, ply: 0, move: 'f3' });
+    expect(quiet.structuredContent.coaching).toMatchObject({ speak: false, facts: { move: 'f3' } });
+    expect(quiet.structuredContent.coaching.guidance).toBeUndefined();
+
+    await callTool('make_move', { gameId, ply: 1, move: 'e5' });
+    const blunder = await callTool('submit_human_move', { gameId, ply: 2, move: 'g4' });
+    expect(blunder.structuredContent.coaching).toMatchObject({
+      speak: true,
+      reason: 'g4 allows mate in one: Qh4#.',
+      facts: { allowsMate: ['Qh4#'] },
+    });
+    expect(blunder.structuredContent.coaching.guidance).toContain('undo_move');
+    expect(blunder.content[0]!.text).toContain('Coach, speak now: g4 allows mate in one: Qh4#.');
+  });
+
+  test('play mode never speaks; settings change mid-game, including how the assistant plays', async () => {
+    const start = await callTool('new_game', { white: 'human', black: 'llm' });
+    const { gameId } = start.structuredContent;
+    expect(start.structuredContent).toMatchObject({
+      coachingMode: 'play@1',
+      opponentLevel: 'best',
+    });
+
+    await callTool('submit_human_move', { gameId, ply: 0, move: 'f3' });
+    await callTool('make_move', { gameId, ply: 1, move: 'e5' });
+    const blunder = await callTool('submit_human_move', { gameId, ply: 2, move: 'g4' });
+    expect(blunder.structuredContent.coaching.speak).toBe(false);
+    expect(blunder.structuredContent.next).not.toContain('Play as');
+
+    const changed = await callTool('update_game_settings', {
+      gameId,
+      ply: 3,
+      coaching: 'blunder_check',
+      opponentLevel: 'beginner',
+    });
+    expect(changed.structuredContent).toMatchObject({
+      coachingMode: 'blunder_check@1',
+      opponentLevel: 'beginner',
+      ply: 3,
+    });
+    expect(changed.structuredContent.coaching.guidance).toContain('blunder check');
+    expect(changed.structuredContent.next).toContain('Play as a beginner (about 400)');
+  });
+});
+
 describe('playing Jev', () => {
   const withJev = (pick?: string) =>
     createApp({ store: new SqliteStore(':memory:'), jev: createJev(mockJevModel(pick)) });
@@ -184,7 +245,12 @@ describe('playing Jev', () => {
 
   test("Jev replies inside the human's move", async () => {
     const server = withJev('e5');
-    const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
+    // Below 'best' Jev draws from its likeliest moves; this mock Jev only ever likes e5.
+    const start = await callTool(
+      'new_game',
+      { white: 'human', black: 'jev', opponentLevel: 'beginner' },
+      server,
+    );
     const { gameId } = start.structuredContent;
 
     const result = await callTool('play_against_jev', { gameId, ply: 0, move: 'e4' }, server);

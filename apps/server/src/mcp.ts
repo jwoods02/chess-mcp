@@ -13,6 +13,7 @@ import { registerPlayAgainstJev } from './tools/play-against-jev.ts';
 import { registerResignGame } from './tools/resign-game.ts';
 import { registerSubmitHumanMove } from './tools/submit-human-move.ts';
 import { registerUndoMove } from './tools/undo-move.ts';
+import { registerUpdateGameSettings } from './tools/update-game-settings.ts';
 
 // Stateless server, so it can't see per call whether the client renders apps. The model can.
 const INSTRUCTIONS = [
@@ -20,6 +21,7 @@ const INSTRUCTIONS = [
   'When the user makes a move and you play the other side, relay their move and play your reply in the same turn. Then answer the way a friend across the board would: your move, and a short comment if there is one worth making.',
   'The user can also move by dragging pieces on the inline board. When the board could submit the move itself, your context says it is already submitted, so reply with make_move. Otherwise the board posts the move as a chat message; submit it like a typed move.',
   'If the board is shown inline in the chat, the user already sees the board, FEN, moves and ply, so leave them out of your reply. If it is not shown, include the board from the tool result.',
+  'Each game result has a next step and a coaching block. Together they say how to coach in this game and, when you play, at what level; follow the ones in the latest result, since the human can change them. Base any claim about the position, such as a hanging piece or a missed mate, on coaching.facts: they are checked, while a board read by eye is easy to get wrong.',
 ];
 
 const JEV_INSTRUCTIONS =
@@ -55,6 +57,7 @@ export function buildMcpServer({ store, jev }: ServerOptions) {
   registerUndoMove(server, deps);
   registerResignGame(server, deps);
   registerDrawOffer(server, deps);
+  registerUpdateGameSettings(server, deps);
 
   return server;
 }

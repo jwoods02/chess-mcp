@@ -46,12 +46,12 @@ chess-mcp/
 │        ├─ chess/
 │        │  ├─ game.ts        # create game, apply move, end game, build GameView (wraps chess.js)
 │        │  ├─ text.ts        # ASCII board + text tool response
-│        │  └─ facts.ts       # M5: checked facts about a move/position, for coaching
+│        │  └─ facts.ts       # checked facts about a move, for coaching
 │        ├─ store/
 │        │  ├─ store.ts       # GameStore interface
 │        │  └─ sqlite.ts      # better-sqlite3 implementation (tests use `:memory:`)
-│        ├─ opponents/        # Jev
-│        └─ coaching/         # M5: one file per coaching mode
+│        ├─ opponents/        # Jev, and opponent levels
+│        └─ coaching/         # coaching modes: registry + one file per mode
 ├─ packages/
 │  ├─ board-app/              # MCP App UI → builds to dist/index.html
 │  └─ shared/                 # zod schemas + types shared by server and UI (GameView etc.)
@@ -113,7 +113,8 @@ interface Game {
     | 'resignation'
     | 'draw_agreed';
   drawOffer?: Color; // a pending draw offer made by this side
-  coachingMode?: string; // M5, e.g. 'blunder_check@1'; games without one play as 'play@1'
+  coachingMode?: string; // e.g. 'blunder_check@1'; games without one play as 'play@1'
+  opponentLevel?: Level; // 'beginner' | 'casual' | 'club' | 'best' (default) for the non-human seats
   createdAt: string;
   updatedAt: string;
 }
@@ -257,11 +258,13 @@ interface GameView {
     jev?: { topMoves: Record<string, number>; fallback?: string }; // when Jev moved
   };
   orientation: Color; // board orientation for the UI: the human's colour
+  coachingMode: string; // 'blunder_check@1'
+  opponentLevel: Level;
   // The text the model needs, also in the structured result:
   board: string; // ASCII board from the human's side
   next: string; // what should happen next, and which tool to call
   note?: string; // anything else to act on, e.g. "call get_game to show them the board"
-  coaching?: CoachingBlock; // M5: see Coaching modes
+  coaching: CoachingBlock; // see Coaching modes
 }
 ```
 
@@ -295,17 +298,18 @@ line is `GameView.next`, and a note, when there is one, follows it.
 
 ### Tools
 
-| Tool                | Input                                                              | Shows the board | Notes                                                                        |
-| ------------------- | ------------------------------------------------------------------ | --------------- | ---------------------------------------------------------------------------- |
-| `new_game`          | `{ white: Player, black: Player, startFen? }`                      | ✅              | Returns a new UUID.                                                          |
-| `get_game`          | `{ gameId }`                                                       | ✅              | Also how the model shows the board after a human move when needed.           |
-| `make_move`         | `{ gameId, ply, move }`                                            | ✅              | The **assistant's** move. Rejected (`not_your_turn`) if a human is to move.  |
-| `submit_human_move` | `{ gameId, ply, move }`                                            | –               | Relays a move the **human** made, in games not against Jev.                  |
-| `play_against_jev`  | `{ gameId, ply, move }`                                            | ✅              | The human's move against Jev; Jev replies in the same call. Only with a key. |
-| `legal_moves`       | `{ gameId, square? }`                                              | –               | SAN list, optionally for one piece.                                          |
-| `undo_move`         | `{ gameId, ply, plies?: number }`                                  | ✅              | Default 2 (back to the human's turn). Never stops on Jev's turn.             |
-| `resign_game`       | `{ gameId, ply, color }`                                           | –               | `color` = the side resigning.                                                |
-| `draw_offer`        | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | –               | `color` = the side acting. See [Draw offers](#draw-offers).                  |
+| Tool                   | Input                                                              | Shows the board | Notes                                                                        |
+| ---------------------- | ------------------------------------------------------------------ | --------------- | ---------------------------------------------------------------------------- |
+| `new_game`             | `{ white, black, startFen?, coaching?, opponentLevel? }`           | ✅              | Returns a new UUID and the full coaching guidance.                           |
+| `get_game`             | `{ gameId }`                                                       | ✅              | Also how the model shows the board after a human move when needed.           |
+| `make_move`            | `{ gameId, ply, move }`                                            | ✅              | The **assistant's** move. Rejected (`not_your_turn`) if a human is to move.  |
+| `submit_human_move`    | `{ gameId, ply, move }`                                            | –               | Relays a move the **human** made, in games not against Jev.                  |
+| `play_against_jev`     | `{ gameId, ply, move }`                                            | ✅              | The human's move against Jev; Jev replies in the same call. Only with a key. |
+| `legal_moves`          | `{ gameId, square? }`                                              | –               | SAN list, optionally for one piece.                                          |
+| `undo_move`            | `{ gameId, ply, plies?: number }`                                  | ✅              | Default 2 (back to the human's turn). Never stops on Jev's turn.             |
+| `resign_game`          | `{ gameId, ply, color }`                                           | –               | `color` = the side resigning.                                                |
+| `draw_offer`           | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | –               | `color` = the side acting. See [Draw offers](#draw-offers).                  |
+| `update_game_settings` | `{ gameId, ply, coaching?, opponentLevel? }`                       | –               | Changes the coaching mode or opponent level. Returns the full guidance.      |
 
 `ply` is the guard described in [Staleness and concurrency](#staleness-and-concurrency-the-ply-guard).
 "Shows the board" means the tool is linked to the board UI (`_meta.ui.resourceUri`). See
@@ -362,7 +366,6 @@ move tool for the side to move), `wrong_tool` (e.g. `submit_human_move` in a gam
 | M4        | `build_position`     | `{ pieces: { square, piece, color }[], sideToMove }` or `{ fen }` returns a valid FEN or a list of problems (missing king, pawn on the back rank, side not to move in check…). LLMs are unreliable at writing FENs, so this is how they "describe a board". |
 | M4        | `create_puzzle`      | `{ fen, prompt, solution?: string[], hints?: string[] }`. Validates that the solution is legal. Shows the board.                                                                                                                                            |
 | M4        | `submit_puzzle_move` | `{ puzzleId, move }` returns `{ legal, verdict: 'correct' \| 'incorrect' \| 'open' }` plus coaching. `open` = no fixed solution, so the LLM judges.                                                                                                         |
-| M5        | `set_coaching_mode`  | `{ gameId, ply, mode }`: switch the coaching mode mid-game. Text only.                                                                                                                                                                                      |
 | M5        | `preview_move`       | `{ gameId, moves: string[] }`: plays a move or short line on a scratch copy of the game and returns the facts, without changing it. The LLM's calculator for checking a claim before making it. Text only.                                                  |
 
 ## MCP App (board UI)
@@ -475,8 +478,9 @@ TypeSafe's System One API directly. Using the AI SDK keeps the door open to othe
 - **Playtests (2026-10-25):** Jev's worst moves were checks or captures that hung material (Bxf7+,
   Qf3+, Qxh2+ hanging the queen). Our move descriptions ("…, check", "captures queen") may push it
   toward those. Worth an A/B test: SAN only vs described moves.
-- **Not built yet:** strength and style control. See
-  [Opponent settings](./product/coaching-modes.md#opponent-settings-later-experiments).
+- **Levels:** below `best`, the server doesn't take Jev's top move. It weights Jev's top N moves by
+  probability, sharpened or flattened by a temperature, and draws one (`opponents/levels.ts`). See
+  [Opponent level](./product/coaching-modes.md#opponent-level). The ratings are uncalibrated guesses.
 - **Tests** use the AI SDK's `Experimental_DecisionMockModelV4` (`opponents/mock-jev.ts`), so they make no
   network calls.
 
@@ -486,55 +490,70 @@ Product side: [coaching modes](./product/coaching-modes.md). The split is:
 
 - **The server** computes facts it can check (chess.js now, an engine later) and decides _when_ the
   coach should speak.
-- **A mode** is mostly prompt text: guidance for the LLM per event, which facts to show, and when to
-  speak.
+- **A mode** is mostly prompt text: a one-line summary for every result, full guidance for key
+  moments, and a small rule over the facts that says when to speak.
 - **The LLM** writes every word the human reads. It doesn't read tactics off the board: it uses the
-  facts, and checks any other concrete claim with `preview_move`.
+  facts (and, later, checks other claims with `preview_move`).
 
 ```ts
 // coaching/mode.ts
-type CoachingEvent = 'game_started' | 'after_move' | 'game_over';
-
 interface CoachingMode {
   id: string; // 'blunder_check'
   version: number; // recorded on the game as 'blunder_check@1'
-  label: string; // for tool descriptions and, later, the setup screen
-  description: string;
-  showJevChoices: boolean; // false in 'play', so the LLM can't volunteer them
-  /** What the LLM should do now, and whether the coach should speak, or nothing. */
-  coach(event: CoachingEvent, facts: MoveFacts, view: GameView): CoachingBlock | undefined;
+  description: string; // for tool descriptions and, later, the setup screen
+  summary: string; // one line, in every result
+  guidance: string; // full instructions, at key moments
+  /** What the coach should say something about now, if anything. */
+  speak(facts: MoveFacts | undefined): string | undefined;
 }
 
+// packages/shared
 interface CoachingBlock {
   mode: string; // 'blunder_check@1'
-  guidance: string; // instructions for the LLM, never shown on the board
+  summary: string;
+  guidance?: string; // only at key moments
   speak: boolean; // the coach has something to say now
-  facts: MoveFacts;
+  reason?: string; // what to speak about, when speak is true
+  facts?: MoveFacts; // about the human's move this round
+}
+
+interface MoveFacts {
+  move: string; // 'Nxf7'
+  captured?: string; // 'pawn'
+  hangs: string[]; // the mover's pieces the opponent can now win: 'knight on f7 (loses 3)'
+  allowsMate: string[]; // the opponent's mates in one: ['Qxf2#']
+  missedMate: string[]; // mates in one the mover had and didn't play
+  missedWin?: string; // the best capture the mover passed up: 'Bxe5 wins 3'
+  material: number; // after the move, White minus Black, in pawns
+  reply?: string; // the opponent's reply, if played: the facts are from before it
 }
 ```
 
-- **One file per mode** in `coaching/modes/`, with a plain object map as the registry. A mode is
-  mostly text, so changing its wording means bumping its version.
-- **The event comes from the game**, not from each tool: `gameResult()` (the one place every tool
-  result passes through) sees whether the game just started, a move was just played or the game ended,
-  asks the game's mode, and appends the block to the text under `Coach notes (for the assistant):` and
-  to `GameView.coaching`. Tools don't change.
-- **Facts** (`chess/facts.ts`, pure functions, unit tested) describe the last move and the position
-  after it, for both sides: what the move did, material, undefended pieces or pieces attacked by a
-  cheaper one, the opponent's captures and checks, and what the mover missed (mate in one, a free
-  capture). Against Jev, also how likely Jev rated the human's move. An engine can add evaluation
-  later without changing the modes.
-- **`preview_move`** runs the same facts on a scratch copy of the game. Server instructions ask the LLM
-  to back concrete claims ("this hangs the bishop") with the facts or a preview.
+- **One file per mode** in `coaching/modes/`, with a plain object map as the registry
+  (`coaching/coaching.ts`). Changing a mode's wording means bumping its version.
+- **Built:** `play` (never speaks) and `blunder_check` (speaks when the human's move loses at least two
+  points of material, allows a mate in one or misses one).
+- **Layered guidance** ([why](./product/coaching-modes.md#keeping-the-model-on-track)): the server
+  instructions carry a standing rule; every result carries `coaching.summary` and, on the LLM's move,
+  the opponent level in `next`; `coaching.guidance` is added only at key moments. `gameResult()` adds
+  it when the tool asks for it (`new_game`, `get_game`, `update_game_settings`), when the game is over,
+  or when the mode speaks. Tools otherwise don't change.
+- **Facts** (`chess/facts.ts`, pure, unit tested) describe the human's move this round: the latest
+  human move, if it's one of the last two plies. They're judged right after that move, so when the
+  opponent has already replied (always, against Jev), the reply is included and `blunder_check` says
+  whether it took advantage. Material is won or lost by a static exchange: both
+  sides keep recapturing with their cheapest piece while it pays. Only legal captures count, so a
+  pinned attacker doesn't make a piece look hanging (a playtest false alarm). An engine can add
+  evaluation later without changing the modes.
+- **`preview_move`** (step 2) will run the same facts on a scratch copy of the game.
 - **Coach after the move, never block it.** On some paths the board has already played the move before
   the LLM hears about it, so a mode offers a takeback (`undo_move`) rather than an "are you sure?"
   prompt. This keeps coaching the same on every path.
 - **Speaking in Jev games.** Against Jev the LLM gets no turn after a dragged move. When
   `coaching.speak` is true, the board posts its chat message ("I played e4.") anyway, which gives the
-  coach a turn. Otherwise it stays quiet, as it does now.
-- **Choosing a mode:** `new_game` takes an optional `coaching` mode id (default `play`), and
-  `set_coaching_mode` switches it mid-game. Opponent settings (how Jev or the LLM plays) are a separate,
-  later setting with the same `id@version` recording.
+  coach a turn. Otherwise it stays quiet.
+- **Choosing:** `new_game` takes optional `coaching` (default `play`) and `opponentLevel` (default
+  `best`); `update_game_settings` changes either mid-game.
 
 ## Testing
 

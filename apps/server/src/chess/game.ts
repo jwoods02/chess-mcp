@@ -1,4 +1,4 @@
-import type { Color, GameState, Player, Result, Termination } from '@chess-mcp/shared';
+import type { Color, GameState, Level, Player, Result, Termination } from '@chess-mcp/shared';
 import { Chess, DEFAULT_POSITION, validateFen, type Square } from 'chess.js';
 
 export interface Game {
@@ -11,6 +11,10 @@ export interface Game {
   result?: Result;
   termination?: Termination;
   drawOffer?: Color;
+  /** e.g. 'blunder_check@1'. Games from before coaching existed play as 'play@1'. */
+  coachingMode?: string;
+  /** How strongly the non-human side plays. Defaults to 'best'. */
+  opponentLevel?: Level;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,7 +56,13 @@ export class ChessError extends Error {
   }
 }
 
-export function createGame(input: { white: Player; black: Player; startFen?: string }): Game {
+export function createGame(input: {
+  white: Player;
+  black: Player;
+  startFen?: string;
+  coachingMode?: string;
+  opponentLevel?: Level;
+}): Game {
   const startFen = input.startFen?.trim() || DEFAULT_POSITION;
   const check = validateFen(startFen);
   if (!check.ok) throw new ChessError('invalid_fen', check.error ?? 'Invalid FEN');
@@ -69,6 +79,8 @@ export function createGame(input: { white: Player; black: Player; startFen?: str
     startFen,
     moves: [],
     status: 'active',
+    coachingMode: input.coachingMode,
+    opponentLevel: input.opponentLevel,
     createdAt: now,
     updatedAt: now,
   };
@@ -165,6 +177,18 @@ export function draw(game: Game, action: 'offer' | 'accept' | 'decline', color: 
   return touch({ ...game, drawOffer: undefined });
 }
 
+/** Changes how the game is coached or how strongly the opponent plays. Allowed after the game too. */
+export function updateSettings(
+  game: Game,
+  settings: { coachingMode?: string; opponentLevel?: Level },
+): Game {
+  return touch({
+    ...game,
+    coachingMode: settings.coachingMode ?? game.coachingMode,
+    opponentLevel: settings.opponentLevel ?? game.opponentLevel,
+  });
+}
+
 export function legalMoves(game: Game, square?: string): string[] {
   if (game.status === 'finished') return [];
   const chess = replay(game);
@@ -204,6 +228,8 @@ export function toState(game: Game): GameState {
       }),
     },
     orientation: game.black === 'human' && game.white !== 'human' ? 'b' : 'w',
+    coachingMode: game.coachingMode ?? 'play@1',
+    opponentLevel: game.opponentLevel ?? 'best',
   };
 }
 

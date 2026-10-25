@@ -4,8 +4,9 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { SHOWS_BOARD } from '../board-ui.ts';
 import { createGame } from '../chess/game.ts';
+import { modeRef } from '../coaching/coaching.ts';
 import { playJevReply } from '../opponents/reply.ts';
-import { gameResult, handle, type ToolDeps } from './common.ts';
+import { coachingInput, gameResult, handle, levelInput, type ToolDeps } from './common.ts';
 
 export function registerNewGame(server: McpServer, { store, jev }: ToolDeps) {
   // Jev is only offered when this server has a TypeSafe API key.
@@ -23,7 +24,8 @@ export function registerNewGame(server: McpServer, { store, jev }: ToolDeps) {
         'Start a new chess game. ' +
         players +
         'The server enforces the rules and stores the game, so read the position from the latest ' +
-        'tool result; a board you track yourself drifts.',
+        'tool result; a board you track yourself drifts. ' +
+        'Ask the human how much coaching they want and how strong an opponent, unless they said.',
       inputSchema: z.object({
         white: seat.describe('Who plays White'),
         black: seat.describe('Who plays Black'),
@@ -31,16 +33,25 @@ export function registerNewGame(server: McpServer, { store, jev }: ToolDeps) {
           .string()
           .optional()
           .describe('Optional starting position (FEN). Defaults to the standard start.'),
+        coaching: coachingInput.default('play'),
+        opponentLevel: levelInput.default('best'),
       }),
       outputSchema: GameView,
       _meta: SHOWS_BOARD,
     },
-    ({ white, black, startFen }) =>
+    ({ white, black, startFen, coaching, opponentLevel }) =>
       handle(store, undefined, async () => {
+        const created = createGame({
+          white,
+          black,
+          startFen,
+          coachingMode: modeRef(coaching),
+          opponentLevel,
+        });
         // If Jev plays White, it makes the first move straight away.
-        const game = await playJevReply(createGame({ white, black, startFen }), jev);
+        const game = await playJevReply(created, jev);
         await store.create(game);
-        return gameResult(game);
+        return gameResult(game, { fullGuidance: true });
       }),
   );
 }

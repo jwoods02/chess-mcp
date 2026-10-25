@@ -158,7 +158,8 @@ function App() {
 
 /**
  * The model didn't see the move (the board sent it), so put the result in its context. If it's the
- * assistant's turn, also post a chat message so it replies. Returns a notice if the host refused.
+ * assistant's turn, or the coach has something to say (say, against Jev), also post a chat message so
+ * the assistant gets a turn. Returns a notice if the host refused.
  */
 async function tellAssistant(app: McpApp, view: GameView, result: ToolResult) {
   const move = view.lastMove?.san ?? 'my move';
@@ -173,7 +174,7 @@ async function tellAssistant(app: McpApp, view: GameView, result: ToolResult) {
       )
       .catch(() => {});
   }
-  if (view.toMove !== 'llm') return undefined;
+  if (view.toMove !== 'llm' && !view.coaching.speak) return undefined;
   return (await postMessage(app, `I played ${move}.`)) ? undefined : fallback;
 }
 

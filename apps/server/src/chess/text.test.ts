@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { applyMove, createGame, toState } from './game.ts';
+import { coachingBlock } from '../coaching/coaching.ts';
 import { board, gameText, gameView } from './text.ts';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -29,7 +30,7 @@ test('flips the board for Black', () => {
 
 test('tells the model what to do next', () => {
   const game = applyMove(createGame({ white: 'human', black: 'llm' }), 'e4', 'human');
-  const view = gameView(toState(game));
+  const view = gameView(toState(game), coachingBlock(game));
   expect(view.next).toBe(
     "Black to move. It's your turn (you play Black): call make_move with ply 1.",
   );
@@ -46,5 +47,5 @@ test('numbers moves correctly when Black moves first', () => {
     'Kd7',
     'llm',
   );
-  expect(gameText(gameView(toState(game)))).toContain('Moves: 12. ... Kd7');
+  expect(gameText(gameView(toState(game), coachingBlock(game)))).toContain('Moves: 12. ... Kd7');
 });

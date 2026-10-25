@@ -43,12 +43,11 @@ export function registerSubmitHumanMove(server: McpServer, { store }: ToolDeps) 
         // show it.
         const view = toState(game);
         const humanMustSee = view.status === 'finished' || view.toMove === 'human';
-        return gameResult(
-          game,
-          humanMustSee
+        return gameResult(game, {
+          note: humanMustSee
             ? 'The human has not seen this position: call get_game to show them the board.'
             : undefined,
-        );
+        });
       }),
   );
 }

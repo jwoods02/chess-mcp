@@ -54,7 +54,7 @@ Add a non-LLM AI opponent so that the LLM can _coach_ instead of _play_.
   signal ("Jev's intuition gave your move 2%; it favoured Nxe5 at 41%").
 - Strength and style control, for example sampling from Jev's top moves rather than always taking the
   best one. These are experiments, listed under
-  [opponent settings](./coaching-modes.md#opponent-settings-later-experiments).
+  [opponent level](./coaching-modes.md#opponent-level).
 - Modes: **human vs Jev with the LLM as coach** and LLM vs Jev (built). Jev vs Jev needs a stepping tool
   (later). Coaching while you play Jev is designed in [coaching modes](./coaching-modes.md#when-the-coach-gets-a-turn).
 
@@ -85,7 +85,10 @@ puzzles reuse it (`puzzle_coach`) and a new-game screen needs modes to offer. Se
 
 - The server supplies checked facts after each move and a `preview_move` calculator; modes are mostly
   prompt text; the server decides when the coach speaks.
-- Start with a few modes from the candidates, chosen after prompt-only playtests.
+- Step 1 (built): checked facts, `play` and `blunder_check`, the opponent level (beginner to best, for
+  Jev and the LLM), and `update_game_settings`.
+- Step 2: `preview_move` and `hints`. Step 3: `post_game_review`. Step 4: `socratic`, `commentary`,
+  `plan_first`.
 - Then a new-game setup screen (opponent, colour, coaching mode) and MCP prompts per mode.
 
 ## Later / ideas

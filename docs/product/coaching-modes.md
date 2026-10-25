@@ -45,15 +45,35 @@ Two rules follow, so coaching behaves the same on every path:
 
 ## What a mode is
 
-| Part               | What it does                                                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| **Guidance**       | Short instructions per event (game start, after the human's move, the human asks for help, game over). Mostly the mode. |
-| **Facts it shows** | Which checked facts go into the result. A "just play" mode hides Jev's top choices so the LLM can't volunteer them.     |
-| **When to speak**  | Every move, only when a fact matters (a dropped piece, a missed mate), only when asked, or only at the end.             |
-| **Version**        | Recorded on the game as `id@version`, so changing the wording is a new version we can compare.                          |
+| Part              | What it does                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **Summary**       | One line that rides along with every result, so the LLM stays on track between coaching moments.                 |
+| **Guidance**      | The full instructions, sent only at key moments (see [Keeping the model on track](#keeping-the-model-on-track)). |
+| **When to speak** | A small function over the facts: every move, only when a fact matters, only when asked, or only at the end.      |
+| **Version**       | Recorded on the game as `id@version`, so changing the wording is a new version we can compare.                   |
 
 Adding a mode means adding one file with some text and a small function. See
 [architecture § Coaching modes](../architecture.md#coaching-modes-m5).
+
+## Keeping the model on track
+
+The server keeps no session, so it can't know what the LLM still remembers: long games, context
+compaction and a game resumed in a new chat all lose instructions given once at the start. Repeating
+every instruction in every result wastes tokens (roughly 6k a game) and gets tuned out. So guidance is
+layered, cheapest first:
+
+1. **A standing rule in the server instructions**, which clients load once and keep at system-prompt
+   level: follow the coaching line and the next step in the latest result, and back concrete claims
+   with the facts.
+2. **One line in every result**, next to the action: the mode's summary in `coaching.summary`, and in
+   `next`, the opponent level when it's the LLM's move ("…playing as a beginner, about 400: …"). About
+   20–40 tokens.
+3. **Full guidance only at key moments**: game start, a settings change, resuming a game (`get_game`),
+   game over, and whenever the mode says speak. Then the detailed instruction arrives exactly when the
+   LLM has to act on it.
+
+A 40-move game costs about 1.5k tokens of reminders plus a few hundred per coaching moment. All of it
+sits in the structured result, which every client shows the model.
 
 ## Facts and the calculator
 
@@ -87,7 +107,7 @@ General teaching principles, applied to chess. Modes should follow them:
 - **A few key moments.** Two or three per game. Twenty corrections teach nothing.
 - **Practise your own mistakes again.** Today's blunder becomes a puzzle next week.
 - **Winning matters.** Beginners who always lose stop playing. An opponent you beat about half the
-  time teaches more than an accurate one (see [Opponent settings](#opponent-settings-later-experiments)).
+  time teaches more than an accurate one (see [Opponent level](#opponent-level)).
 
 What doesn't help: evaluation numbers, "the best move was X" without why, interrupting every move, and
 generic praise.
@@ -98,7 +118,7 @@ Roughly ordered by how much the coach says.
 
 | id                 | Advice     | What the coach does                                                                                       | Needs             |
 | ------------------ | ---------- | --------------------------------------------------------------------------------------------------------- | ----------------- |
-| `play`             | None       | Plays and chats. Hides Jev's top choices and says nothing about the position unless asked.                | Prompt only       |
+| `play`             | None       | Plays and chats. Says nothing about the position, or Jev's instinct, unless asked.                        | Prompt only       |
 | `post_game_review` | At the end | Silent during play. At the end, asks what the human was thinking at 2–3 key moments, then explains.       | Facts             |
 | `blunder_check`    | Sometimes  | Silent unless a fact matters (a dropped piece, a missed mate), then explains and offers a takeback.       | Facts, speak flag |
 | `hints`            | When asked | Hints escalate from a theme to a piece to the move. Hints used are counted.                               | `preview_move`    |
@@ -107,7 +127,8 @@ Roughly ordered by how much the coach says.
 | `plan_first`       | Every move | The human says their plan before each move; the coach responds to the reasoning, not just the move.       | Prompt only       |
 | `puzzle_coach`     | Puzzles    | Reacts to the human's attempt, asks for their reasoning, then nudges or confirms.                         | Puzzles (M4)      |
 
-Modes are chosen at game creation and can be switched mid-game (`set_coaching_mode`).
+Modes are chosen at game creation and can be switched mid-game (`update_game_settings`). Built so far:
+`play` and `blunder_check`.
 
 ## Experiences that are hard to get elsewhere
 
@@ -127,25 +148,43 @@ an open conversation grounded in checked facts, which can build things on reques
    the master's idea next to theirs.
 7. **Try again from any moment.** "Go back to where I blundered and let me play it again", as a branch
    of the real game.
-8. **An opponent you describe.** "Play like a 1000 who loves to attack", using the opponent settings below.
+8. **An opponent you describe.** "Play like a 1000 who loves to attack", using the opponent level below.
 
-## Opponent settings (later experiments)
+## Opponent level
 
-Coaching modes decide how much advice the human gets. A separate setting decides how the opponent
-plays, so the two can be combined freely ("blunder check against a weak Jev"). We expect to try
-several ideas here, so treat each one like a mode: a named, versioned setting recorded on the game
-(for example `jev-top5@1`), chosen at game creation, and easy to add or drop.
+Coaching modes decide how much advice the human gets. The opponent level decides how the opponent
+plays, so the two combine freely ("blunder check against a beginner-level Jev"). Like a mode, it's set
+at game creation, can be changed mid-game (`update_game_settings`) and is recorded on the game.
 
-| Idea                     | Opponent | How                                                                                                      |
-| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------- |
-| Pick among the top moves | Jev      | Choose at random between Jev's 1st and Nth most likely move, instead of always the top one.              |
-| Temperature              | Jev      | Sample from Jev's whole distribution, sharpened or flattened. Low = strongest, high = looser and wilder. |
-| "Play like a 1200"       | Jev      | Pass a target rating in Jev's state or question, and see whether its choices change.                     |
-| "Play like a 1200"       | LLM      | Tell the assistant the rating to play at and the kind of mistakes that player makes.                     |
-| Engine skill level       | Engine   | When an analysis engine (Stockfish) arrives, use its built-in skill levels as a calibrated baseline.     |
+| Level      | Rough rating | The LLM opponent is told                                                                      | Jev                         |
+| ---------- | ------------ | --------------------------------------------------------------------------------------------- | --------------------------- |
+| `beginner` | ~400         | Develops slowly, sometimes leaves a piece undefended or misses a threat, grabs free material. | Picks among its top 5 moves |
+| `casual`   | ~800         | Sensible development, usually sees one-move threats, misses two-move tactics.                 | Picks among its top 4       |
+| `club`     | ~1200        | Solid and alert to one-move tactics, misjudges plans, misses deeper combinations.             | Picks among its top 3       |
+| `best`     | —            | Play your best.                                                                               | Always its top move         |
 
-What to watch when trying them: whether the human keeps playing, how often they win, and whether the
-opponent's mistakes feel human (a missed tactic) rather than random (a hung queen for no reason).
+- **The LLM opponent is steered by prompt only.** The server can't choose its moves, so the level's
+  description goes in `next` every time it's the LLM's turn. A bare number ("play like a 400") gives the
+  model nothing to act on; describing how that player behaves does. Models asked to play weakly tend to
+  either play normally or blunder absurdly, so expect to tune the descriptions.
+- **Jev is steered by the server.** Jev's moves are weighted by how likely it rated them, sharpened or
+  flattened by a temperature, and one is drawn from the top N. The server makes the choice, so it can't
+  drift, but the ratings are guesses until we measure the levels against something calibrated, such as
+  Stockfish's skill levels.
+- **The facts can grade the persona.** After the LLM's move the same facts say whether it hung a piece
+  or missed a capture, so over a game we can see whether "beginner" played like one.
+
+### Later experiments
+
+| Idea                   | Opponent | How                                                                                    |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------- |
+| Temperature only       | Jev      | Sample from Jev's whole distribution rather than the top N.                            |
+| Rating in Jev's prompt | Jev      | Pass the target rating in Jev's state or question, and see whether its choices change. |
+| Styles                 | Both     | "Loves to attack", "trades everything": a style line next to the level.                |
+| Engine skill level     | Engine   | When Stockfish arrives, use its skill levels as a calibrated baseline.                 |
+
+What to watch: whether the human keeps playing, how often they win, and whether the opponent's mistakes
+feel human (a missed tactic) rather than random (a hung queen for no reason).
 
 ## How we try modes out
 
