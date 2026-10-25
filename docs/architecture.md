@@ -43,10 +43,14 @@ chess-mcp/
 │        ├─ app.ts            # Hono app: GET /health, ALL /mcp
 │        ├─ mcp.ts            # buildMcpServer(deps): registers tools + the board UI resource
 │        ├─ tools/            # one file per tool
-│        ├─ chess/
-│        │  ├─ game.ts        # create game, apply move, end game, build GameView (wraps chess.js)
-│        │  ├─ text.ts        # ASCII board + text tool response
+│        ├─ chess/            # the rules, free of presentation
+│        │  ├─ game.ts        # create game, apply move, end game, undo, draws (wraps chess.js)
+│        │  ├─ notation.ts    # reading typed moves (SAN, UCI, loose forms); the numbered move list
+│        │  ├─ names.ts       # how sides, players and pieces are named in text
 │        │  └─ facts.ts       # checked facts about a move, for coaching
+│        ├─ view/
+│        │  ├─ state.ts       # toState(game): the GameState clients see
+│        │  └─ text.ts        # GameView, ASCII board and the text tool response
 │        ├─ store/
 │        │  ├─ store.ts       # GameStore interface
 │        │  └─ sqlite.ts      # better-sqlite3 implementation (tests use `:memory:`)
@@ -136,7 +140,7 @@ repetition, and it's trivially cheap. The current FEN is derived, not stored.
 
 - `createGame({ white, black, startFen? }) → Game`
 - `applyMove(game, input, by) → Game`: plays a move for the side to move, which must be controlled by
-  `by` (otherwise `not_your_turn`). It accepts SAN (`Nf3`), UCI
+  `by` (otherwise `not_your_turn`). Reading the input is in `chess/notation.ts`: SAN (`Nf3`), UCI
   (`g1f3`, `e7e8q`) and loose forms (`nf3`, `0-0`, `e8q`). A lowercase `bx…` is always a pawn capture, never
   a bishop move. Promotions must name the piece. It throws a
   `ChessError` with a `code` on anything illegal, and sets status/result/termination when the game
@@ -240,8 +244,10 @@ code. We'll add columns or tables when a real query needs them.
 
 `GameView` is what the **server returns** in every tool result. The model reads it (as text and as
 structured data) and so does the board UI. The model only ever sends tool inputs. It is the game's
-state (`toState(game)` in `chess/game.ts`) plus the text the model needs (`gameView(state, note)` in
-`chess/text.ts`), so the chess logic stays free of presentation.
+state (`toState(game)` in `view/state.ts`) plus the text the model needs (`gameView(state, …)` in
+`view/text.ts`), so the chess logic stays free of presentation. `handle()` in `tools/common.ts` gives
+each tool a `gameResult` for the request, which leaves the ASCII board out when the client shows the
+board UI.
 
 ```ts
 interface GameView {
@@ -616,6 +622,8 @@ interface MoveFacts {
 
 - `chess/game.ts`: move parsing, every way a game can end, special moves (castling, en passant,
   promotion) and undo.
+- `board-app`: the plain helpers in `lib/` (history replay, the take-back rule, error wording). No
+  component tests: the board is checked by hand in the MCP Inspector.
 - `store`: one small test file against SQLite in memory (`:memory:`). Server tests use the same.
 - Server: an in-process test that drives `app.request('/mcp', …)` through a full scripted game.
 - Jev (M3): the AI SDK's mock decision model (`opponents/mock-jev.ts`) and small stub opponents for

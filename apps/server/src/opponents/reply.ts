@@ -1,4 +1,5 @@
-import { applyMove, moveText, replay, seat, type Game } from '../chess/game.ts';
+import { applyMove, replay, seat, type Game } from '../chess/game.ts';
+import { moveText } from '../chess/notation.ts';
 import { pickAtLevel } from './levels.ts';
 import type { Opponent } from './opponent.ts';
 

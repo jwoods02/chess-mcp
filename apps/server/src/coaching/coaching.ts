@@ -1,6 +1,6 @@
-import type { CoachingBlock } from '@chess-mcp/shared';
+import type { CoachingBlock, GameState } from '@chess-mcp/shared';
 import { humanMoveFacts, positionFacts } from '../chess/facts.ts';
-import { toState, type Game } from '../chess/game.ts';
+import type { Game } from '../chess/game.ts';
 import type { CoachingMode } from './mode.ts';
 import { blunderCheck } from './modes/blunder-check.ts';
 import { hints } from './modes/hints.ts';
@@ -27,7 +27,7 @@ export function modeOf(game: Pick<Game, 'coachingMode'>): CoachingMode {
 }
 
 /**
- * How to coach right now. The summary is always there; the full guidance only at key moments: when
+ * How to coach right now, given the game and its state. The summary is always there; the full guidance only at key moments: when
  * the caller asks (a game starts, resumes or changes settings), when the game is over, or when the
  * mode has something to say. Facts, and so speaking, only come with a move that was just played: an
  * undo or a resumed game would otherwise repeat old news. When a game with a human ends, every mode
@@ -35,6 +35,7 @@ export function modeOf(game: Pick<Game, 'coachingMode'>): CoachingMode {
  */
 export function coachingBlock(
   game: Game,
+  state: GameState,
   {
     fullGuidance = false,
     afterMove = false,
@@ -43,8 +44,7 @@ export function coachingBlock(
 ): CoachingBlock {
   const mode = modeOf(game);
   const facts = afterMove ? humanMoveFacts(game) : undefined;
-  const humanToMove = afterMove && toState(game).toMove === 'human';
-  const position = humanToMove ? positionFacts(game) : undefined;
+  const position = afterMove && state.toMove === 'human' ? positionFacts(game) : undefined;
   const { keyMoments } = game;
   const review = ended && keyMoments ? reviewReason(keyMoments) : undefined;
   const reason = [mode.speak(facts, position), review].filter(Boolean).join(' ') || undefined;

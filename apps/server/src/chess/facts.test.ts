@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { humanMoveFacts, positionFacts } from './facts.ts';
-import { applyMove, createGame, toState, type Game } from './game.ts';
+import { applyMove, createGame, type Game } from './game.ts';
+import { toState } from '../view/state.ts';
 
 /** Plays moves for whoever's turn it is. */
 const playFrom = (game: Game, moves: string[]) =>

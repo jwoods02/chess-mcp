@@ -3,7 +3,7 @@ import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { SHOWS_BOARD } from '../board-ui.ts';
-import { gameIdInput, gameResult, handle, loadGame, type ToolDeps } from './common.ts';
+import { gameIdInput, handle, loadGame, type ToolDeps } from './common.ts';
 
 export function registerGetGame(server: McpServer, { store }: ToolDeps) {
   registerAppTool(
@@ -18,7 +18,7 @@ export function registerGetGame(server: McpServer, { store }: ToolDeps) {
       _meta: SHOWS_BOARD,
     },
     ({ gameId }) =>
-      handle(server, store, gameId, async () =>
+      handle(server, store, gameId, async (gameResult) =>
         // Often a resumed game, so repeat the coaching in full.
         gameResult(await loadGame(store, gameId), { fullGuidance: true }),
       ),

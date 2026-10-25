@@ -1,19 +1,11 @@
 import { Chess, type Move } from 'chess.js';
 import { experimental_decide as decide, type Experimental_DecisionModel } from 'ai';
+import { colorName, PIECE_NAMES } from '../chess/names.ts';
 import type { Opponent } from './opponent.ts';
 
 // Jev answers in about 0.1-0.3s. Fail fast so the caller's single retry and random-move fallback
 // still finish well inside the board's wait for a reply.
 const TIMEOUT_MS = 2500;
-
-const PIECES: Record<string, string> = {
-  p: 'pawn',
-  n: 'knight',
-  b: 'bishop',
-  r: 'rook',
-  q: 'queen',
-  k: 'king',
-};
 
 /**
  * Jev, TypeSafe AI's decision model, called through the AI SDK. It isn't an LLM: it answers one
@@ -23,7 +15,7 @@ export function createJev(model: Experimental_DecisionModel): Opponent {
   return {
     async chooseMove({ fen, moves, legalMoves }) {
       const chess = new Chess(fen);
-      const side = chess.turn() === 'w' ? 'White' : 'Black';
+      const side = colorName(chess.turn());
       const options = chess.moves({ verbose: true }).filter((m) => legalMoves.includes(m.san));
       const started = Date.now();
 
@@ -65,10 +57,10 @@ export function createJev(model: Experimental_DecisionModel): Opponent {
 
 /** "Knight g1→f3, captures pawn, check": what the move does, so Jev has more to go on than SAN. */
 function describeMove(move: Move): string {
-  const piece = PIECES[move.piece]!;
+  const piece = PIECE_NAMES[move.piece]!;
   const parts = [`${piece[0]!.toUpperCase()}${piece.slice(1)} ${move.from}→${move.to}`];
-  if (move.captured) parts.push(`captures ${PIECES[move.captured]}`);
-  if (move.promotion) parts.push(`promotes to ${PIECES[move.promotion]}`);
+  if (move.captured) parts.push(`captures ${PIECE_NAMES[move.captured]}`);
+  if (move.promotion) parts.push(`promotes to ${PIECE_NAMES[move.promotion]}`);
   if (move.isKingsideCastle() || move.isQueensideCastle()) parts.push('castles');
   if (move.san.endsWith('#')) parts.push('checkmate');
   else if (move.san.endsWith('+')) parts.push('check');

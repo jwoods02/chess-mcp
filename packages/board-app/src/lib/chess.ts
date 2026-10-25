@@ -10,6 +10,11 @@ export interface Shown {
   lastMove?: { from: string; to: string };
 }
 
+/** A position in the game's history, with its label for the move list: "12. Nf3" or "Start". */
+export interface Step extends Shown {
+  label: string;
+}
+
 export interface LocalMove {
   uci: string;
   san: string;
@@ -17,22 +22,18 @@ export interface LocalMove {
 }
 
 /** The position after each ply, from the game's PGN. Index 0 is the start. */
-export function positions(pgn: string): Shown[] {
+export function positions(pgn: string): Step[] {
   const chess = new Chess();
   chess.loadPgn(pgn);
   const moves = chess.history({ verbose: true });
   const start = moves[0]?.before ?? chess.fen();
-  const after = moves.map((m) => ({ fen: m.after, lastMove: { from: m.from, to: m.to } }));
-  return [{ fen: start }, ...after];
-}
-
-/** "12. Nf3" or "12... Nc6" for the move that led to the position at `ply`. */
-export function moveLabel(history: Shown[], ply: number): string {
-  if (ply === 0) return 'Start';
-  const chess = new Chess(history[ply - 1]!.fen);
-  const number = chess.moveNumber();
-  const move = chess.move(history[ply]!.lastMove!);
-  return `${number}${move.color === 'w' ? '.' : '...'} ${move.san}`;
+  const after = moves.map((m) => ({
+    fen: m.after,
+    lastMove: { from: m.from, to: m.to },
+    // The move number is the sixth field of the FEN before the move.
+    label: `${m.before.split(' ')[5]}${m.color === 'w' ? '.' : '...'} ${m.san}`,
+  }));
+  return [{ fen: start, label: 'Start' }, ...after];
 }
 
 /**

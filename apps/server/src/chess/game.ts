@@ -1,13 +1,7 @@
-import type {
-  Color,
-  GameState,
-  KeyMoment,
-  Level,
-  Player,
-  Result,
-  Termination,
-} from '@chess-mcp/shared';
+import type { Color, KeyMoment, Level, Player, Result, Termination } from '@chess-mcp/shared';
 import { Chess, DEFAULT_POSITION, validateFen, type Square } from 'chess.js';
+import { colorName, playerName } from './names.ts';
+import { illegalMoveMessage, parseUci, tryMove } from './notation.ts';
 
 export interface Game {
   id: string;
@@ -223,54 +217,9 @@ export function legalMoves(game: Game, square?: string): string[] {
   return chess.moves({ square: square.toLowerCase() as Square });
 }
 
-export function toState(game: Game): GameState {
-  const chess = replay(game);
-  chess.setHeader('White', game.white);
-  chess.setHeader('Black', game.black);
-  if (game.result) chess.setHeader('Result', game.result);
-
-  const last = game.moves.at(-1);
-  return {
-    gameId: game.id,
-    fen: chess.fen(),
-    pgn: chess.pgn(),
-    moves: game.moves.map((m) => m.san),
-    ply: game.moves.length,
-    turn: chess.turn(),
-    toMove: game.status === 'finished' ? null : seat(game, chess.turn()),
-    white: game.white,
-    black: game.black,
-    status: game.status,
-    result: game.result,
-    termination: game.termination,
-    inCheck: chess.inCheck(),
-    drawOffer: game.drawOffer,
-    lastMove: last && {
-      san: last.san,
-      from: last.uci.slice(0, 2),
-      to: last.uci.slice(2, 4),
-      by: last.by,
-      ...(last.by === 'jev' && {
-        jev: { topMoves: last.meta?.probabilities ?? {}, fallback: last.meta?.fallback },
-      }),
-    },
-    orientation: game.black === 'human' && game.white !== 'human' ? 'b' : 'w',
-    coachingMode: game.coachingMode ?? 'play@1',
-    opponentLevel: game.opponentLevel ?? 'best',
-  };
-}
-
 /** Games against Jev use `play_against_jev` for the human's moves, so Jev's reply is shown. */
 export function hasJev(game: Pick<Game, 'white' | 'black'>): boolean {
   return game.white === 'jev' || game.black === 'jev';
-}
-
-/** The numbered moves from a PGN, e.g. "1. e4 e5 2. Nf3", without headers or the result. */
-export function moveText(pgn: string): string {
-  return pgn
-    .replace(/^\[.*\]$/gm, '')
-    .trim()
-    .replace(/\s*(\*|1-0|0-1|1\/2-1\/2)$/, '');
 }
 
 /** How the game ends in this position, if it's checkmate or a draw. Needs the history for repetition. */
@@ -291,14 +240,6 @@ export function ending(chess: Chess): { result: Result; termination: Termination
 
 export function seat(game: Game, color: Color): Player {
   return color === 'w' ? game.white : game.black;
-}
-
-export function colorName(color: Color): string {
-  return color === 'w' ? 'White' : 'Black';
-}
-
-export function playerName(player: Player): string {
-  return { human: 'human', llm: 'assistant', jev: 'Jev' }[player];
 }
 
 // --- helpers ---
@@ -338,53 +279,4 @@ function finish(game: Game, result: Result, termination: Termination): Game {
 function withStatus(game: Game, chess: Chess): Game {
   const over = ending(chess);
   return over ? finish(game, over.result, over.termination) : touch(game);
-}
-
-function parseUci(input: string) {
-  const m = /^([a-h][1-8])-?([a-h][1-8])([qrbn])?$/i.exec(input);
-  if (!m) return undefined;
-  return { from: m[1]!.toLowerCase(), to: m[2]!.toLowerCase(), promotion: m[3]?.toLowerCase() };
-}
-
-/** Tries the input as UCI, then as SAN with a few forgiving rewrites. Returns undefined if illegal. */
-function tryMove(chess: Chess, input: string) {
-  const uci = parseUci(input);
-  const promotion = /^((?:[a-h]x)?[a-h][18])=?([qrbn])([+#]?)$/i.exec(input);
-  const candidates = uci
-    ? [uci]
-    : [
-        input,
-        input.replace(/0/g, 'O').replace(/o/g, 'O'), // 0-0, o-o → O-O
-        // nf3 → Nf3, but bxc3 is a pawn capture: never turn it into a bishop move.
-        ...(input.startsWith('bx') ? [] : [input.charAt(0).toUpperCase() + input.slice(1)]),
-        // e8q, e8=q → e8=Q
-        ...(promotion
-          ? [`${promotion[1]!.toLowerCase()}=${promotion[2]!.toUpperCase()}${promotion[3]}`]
-          : []),
-      ];
-  for (const candidate of candidates) {
-    try {
-      return chess.move(candidate);
-    } catch {
-      // try the next form
-    }
-  }
-  return undefined;
-}
-
-function illegalMoveMessage(chess: Chess, input: string): string {
-  const legal = chess.moves();
-  if (!input)
-    return `No move was given. Legal moves for ${colorName(chess.turn())}: ${legal.join(', ')}.`;
-  const uci = parseUci(input);
-  const needsPromotion = chess
-    .moves({ verbose: true })
-    .some(
-      (m) =>
-        m.promotion && (uci ? m.from === uci.from && m.to === uci.to : m.san.startsWith(input)),
-    );
-  if (needsPromotion) {
-    return `"${input}" promotes a pawn: say which piece, e.g. "${uci ? `${uci.from}${uci.to}q` : `${input}=Q`}".`;
-  }
-  return `"${input}" is not a legal move for ${colorName(chess.turn())}. Legal moves: ${legal.join(', ')}.`;
 }

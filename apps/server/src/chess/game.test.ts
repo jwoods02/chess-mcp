@@ -6,10 +6,10 @@ import {
   draw,
   legalMoves,
   resign,
-  toState,
   undo,
   type Game,
 } from './game.ts';
+import { toState } from '../view/state.ts';
 
 const newGame = (startFen?: string) => createGame({ white: 'human', black: 'llm', startFen });
 /** Plays a move for whoever's turn it is. */

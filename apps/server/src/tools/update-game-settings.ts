@@ -7,7 +7,6 @@ import {
   changeGame,
   coachingInput,
   gameIdInput,
-  gameResult,
   handle,
   levelInput,
   plyInput,
@@ -33,7 +32,7 @@ export function registerUpdateGameSettings(server: McpServer, { store }: ToolDep
       outputSchema: GameView,
     },
     ({ gameId, ply, coaching, opponentLevel }) =>
-      handle(server, store, gameId, async () => {
+      handle(server, store, gameId, async (gameResult) => {
         const { game } = await changeGame(store, gameId, ply, (g) =>
           updateSettings(g, { coachingMode: coaching && modeRef(coaching), opponentLevel }),
         );

@@ -1,18 +1,10 @@
 import type { MoveFacts, PositionFacts } from '@chess-mcp/shared';
 import { Chess, type Square } from 'chess.js';
 import { ending, replay, type Game } from './game.ts';
+import { colorName, PIECE_NAMES } from './names.ts';
 
 // Pawns. The king's value only matters for picking the cheapest capturer, and it captures last.
 const VALUE: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 100 };
-const NAME: Record<string, string> = {
-  p: 'pawn',
-  n: 'knight',
-  b: 'bishop',
-  r: 'rook',
-  q: 'queen',
-  k: 'king',
-};
-
 /** Facts about the human's move this round: their latest move, if it's one of the last two plies. */
 export function humanMoveFacts(game: Game): MoveFacts | undefined {
   const index = game.moves.findLastIndex((m) => m.by === 'human');
@@ -43,7 +35,7 @@ export function moveFacts(game: Game, index: number): MoveFacts {
 
   return {
     move: played.san,
-    ...(played.captured && { captured: NAME[played.captured] }),
+    ...(played.captured && { captured: PIECE_NAMES[played.captured] }),
     // A capturing piece that can be taken back for no more than it took is a trade, not hanging.
     hanging: hanging.filter((h) => h.square !== played.to || h.loses > capturedValue),
     loses: Math.max(0, worst - capturedValue),
@@ -62,7 +54,7 @@ export function moveFacts(game: Game, index: number): MoveFacts {
 export function positionFacts(game: Game): PositionFacts {
   const chess = replay(game);
   const side = chess.turn();
-  const toMove = side === 'w' ? 'White' : 'Black';
+  const toMove = colorName(side) as PositionFacts['toMove'];
   const over = ending(chess);
   if (over) {
     return {
@@ -117,7 +109,7 @@ function hangingPieces(chess: Chess, color: string): MoveFacts['hanging'] {
       continue;
     }
     const loses = exchangeGain(chess, piece.square);
-    if (loses > 0) hanging.push({ piece: NAME[piece.type]!, square: piece.square, loses });
+    if (loses > 0) hanging.push({ piece: PIECE_NAMES[piece.type]!, square: piece.square, loses });
   }
   return hanging.sort((a, b) => b.loses - a.loses);
 }

@@ -1,9 +1,15 @@
 import { expect, test } from 'vitest';
-import { applyMove, createGame, toState } from './game.ts';
+import { applyMove, createGame, type Game } from '../chess/game.ts';
+import { toState } from './state.ts';
 import { coachingBlock } from '../coaching/coaching.ts';
 import { board, gameText, gameView } from './text.ts';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+const viewOf = (game: Game) => {
+  const state = toState(game);
+  return gameView(state, coachingBlock(game, state));
+};
 
 test('draws the board from White', () => {
   expect(board(START, 'w')).toBe(
@@ -30,7 +36,7 @@ test('flips the board for Black', () => {
 
 test('tells the model what to do next', () => {
   const game = applyMove(createGame({ white: 'human', black: 'llm' }), 'e4', 'human');
-  const view = gameView(toState(game), coachingBlock(game));
+  const view = viewOf(game);
   expect(view.next).toBe(
     "Black to move. It's your turn (you play Black): call make_move with ply 1.",
   );
@@ -47,5 +53,5 @@ test('numbers moves correctly when Black moves first', () => {
     'Kd7',
     'llm',
   );
-  expect(gameText(gameView(toState(game), coachingBlock(game)))).toContain('Moves: 12. ... Kd7');
+  expect(gameText(viewOf(game))).toContain('Moves: 12. ... Kd7');
 });

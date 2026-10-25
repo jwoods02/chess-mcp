@@ -1,7 +1,7 @@
 import type { GameView } from '@chess-mcp/shared';
 import { Chess } from 'chess.js';
 import { expect, test } from 'vitest';
-import { canTakeBack, moveLabel, positions } from './chess.ts';
+import { canTakeBack, positions } from './chess.ts';
 
 test('replays a game from its PGN, including one that starts with Black to move', () => {
   const chess = new Chess('4k3/8/8/8/8/8/4P3/4K3 b - - 0 12');
@@ -10,9 +10,9 @@ test('replays a game from its PGN, including one that starts with Black to move'
   const history = positions(chess.pgn());
 
   expect(history).toHaveLength(3);
-  expect(history[0]).toEqual({ fen: '4k3/8/8/8/8/8/4P3/4K3 b - - 0 12' });
+  expect(history[0]).toEqual({ fen: '4k3/8/8/8/8/8/4P3/4K3 b - - 0 12', label: 'Start' });
   expect(history[2]!.lastMove).toEqual({ from: 'e2', to: 'e4' });
-  expect([0, 1, 2].map((ply) => moveLabel(history, ply))).toEqual(['Start', '12... Kd7', '13. e4']);
+  expect(history.map((step) => step.label)).toEqual(['Start', '12... Kd7', '13. e4']);
 });
 
 /** A game view with only the fields the take-back rule reads. */

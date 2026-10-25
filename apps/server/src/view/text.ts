@@ -7,12 +7,22 @@ import type {
   PositionFacts,
 } from '@chess-mcp/shared';
 import { personaText } from '../opponents/levels.ts';
-import { colorName, hasJev, moveText, playerName } from './game.ts';
+import { hasJev } from '../chess/game.ts';
+import { colorName, playerName } from '../chess/names.ts';
+import { moveText } from '../chess/notation.ts';
 
-/** Adds what the model needs to a game's state: the board, what happens next, any note, coaching. */
-export function gameView(state: GameState, coaching: CoachingBlock, note?: string): GameView {
-  const view = { ...state, board: board(state.fen, state.orientation), next: next(state) };
-  return { ...view, note, coaching };
+/**
+ * Adds what the model needs to a game's state: the ASCII board (unless the client shows the board UI),
+ * what happens next, any note, and the coaching.
+ */
+export function gameView(
+  state: GameState,
+  coaching: CoachingBlock,
+  note?: string,
+  showsBoard = false,
+): GameView {
+  const ascii = showsBoard ? undefined : board(state.fen, state.orientation);
+  return { ...state, board: ascii, next: next(state), note, coaching };
 }
 
 /** The full text response for a game: board, FEN, moves, status and what should happen next. */

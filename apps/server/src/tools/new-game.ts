@@ -6,7 +6,7 @@ import { SHOWS_BOARD } from '../board-ui.ts';
 import { createGame } from '../chess/game.ts';
 import { modeRef } from '../coaching/coaching.ts';
 import { playJevReply } from '../opponents/reply.ts';
-import { coachingInput, gameResult, handle, levelInput, type ToolDeps } from './common.ts';
+import { coachingInput, handle, levelInput, type ToolDeps } from './common.ts';
 
 export function registerNewGame(server: McpServer, { store, jev }: ToolDeps) {
   // Jev is only offered when this server has a TypeSafe API key.
@@ -41,7 +41,7 @@ export function registerNewGame(server: McpServer, { store, jev }: ToolDeps) {
       _meta: SHOWS_BOARD,
     },
     ({ white, black, startFen, coaching, opponentLevel }) =>
-      handle(server, store, undefined, async () => {
+      handle(server, store, undefined, async (gameResult) => {
         const created = createGame({
           white,
           black,

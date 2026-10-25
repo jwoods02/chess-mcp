@@ -1,13 +1,13 @@
 import { Level } from '@chess-mcp/shared';
-import type { GameView } from '@chess-mcp/shared';
 import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { clientShowsBoard } from '../board-ui.ts';
-import { ChessError, toState, type Game } from '../chess/game.ts';
+import { ChessError, type Game } from '../chess/game.ts';
 import { coachingBlock, MODE_IDS, MODES } from '../coaching/coaching.ts';
 import { withKeyMoments } from '../coaching/review.ts';
 import { LEVELS } from '../opponents/levels.ts';
-import { gameText, gameView } from '../chess/text.ts';
+import { toState } from '../view/state.ts';
+import { gameText, gameView } from '../view/text.ts';
 import type { Opponent } from '../opponents/opponent.ts';
 import type { GameStore } from '../store/store.ts';
 
@@ -41,21 +41,6 @@ export const levelInput = Level.describe(
     '. Pick one to suit the human, so they win about half their games.',
 );
 
-/**
- * A successful result: the text response plus the GameView as structured content. Both carry the
- * board, the next step and the coaching, since some clients show the model only one of them. Ask for
- * `fullGuidance` when the model may not know the game's coaching yet: a start, resume or change.
- * Move tools pass `afterMove`, so the coaching includes facts about the move just played, and tools
- * pass `ended` from changeGame, so the result that ends the game offers a review.
- */
-export function gameResult(
-  game: Game,
-  options: { note?: string; fullGuidance?: boolean; afterMove?: boolean; ended?: boolean } = {},
-): CallToolResult {
-  const view = gameView(toState(game), coachingBlock(game, options), options.note);
-  return { content: [{ type: 'text', text: gameText(view) }], structuredContent: view };
-}
-
 export async function loadGame(store: GameStore, gameId: string): Promise<Game> {
   const game = await store.get(gameId);
   if (!game) throw new ChessError('game_not_found', `No game with ID ${gameId}.`);
@@ -81,32 +66,53 @@ export async function changeGame(
   return { game: changed, ended: game.status === 'active' && changed.status === 'finished' };
 }
 
+export interface ResultOptions {
+  note?: string;
+  /** The model may not know the game's coaching yet: a start, resume or settings change. */
+  fullGuidance?: boolean;
+  /** A move was just played, so the coaching includes facts about it. */
+  afterMove?: boolean;
+  /** From changeGame: this change ended the game, so the result offers a review. */
+  ended?: boolean;
+}
+
 /**
- * Runs a tool body, turning rule errors into an error result that shows the current board. When the
- * client shows the board UI, the ASCII board is left out: the human already sees the real one, and a
- * model given the ASCII board tends to repeat it.
+ * A game's result: the text response plus the GameView as structured content. Both carry the board,
+ * the next step and the coaching, since some clients show the model only one of them.
+ */
+export type GameResult = (game: Game, options?: ResultOptions) => CallToolResult;
+
+/**
+ * Runs a tool body, giving it `gameResult` for this request and turning rule errors into an error
+ * result that shows the current board. When the client shows the board UI, the ASCII board is left
+ * out: the human already sees the real one, and a model given the ASCII board tends to repeat it.
  */
 export async function handle(
   server: McpServer,
   store: GameStore,
   gameId: string | undefined,
-  body: () => Promise<CallToolResult>,
+  body: (gameResult: GameResult) => Promise<CallToolResult>,
 ): Promise<CallToolResult> {
   const showsBoard = clientShowsBoard(server);
+  const view = (game: Game, options: ResultOptions = {}) => {
+    const state = toState(game);
+    return gameView(state, coachingBlock(game, state, options), options.note, showsBoard);
+  };
   try {
-    const result = await body();
-    return showsBoard ? withoutAsciiBoard(result) : result;
+    return await body((game, options) => {
+      const shown = view(game, options);
+      return { content: [{ type: 'text', text: gameText(shown) }], structuredContent: shown };
+    });
   } catch (error) {
     if (!(error instanceof ChessError)) throw error;
     const message = `Error [${error.code}]: ${error.message}`;
     const game = gameId ? await store.get(gameId) : undefined;
     if (!game) return { isError: true, content: [{ type: 'text', text: message }] };
-    const full = gameView(toState(game), coachingBlock(game));
-    const view = showsBoard ? omitBoard(full) : full;
+    const shown = view(game);
     return {
       isError: true,
-      content: [{ type: 'text', text: `${message}\n\nCurrent position:\n${gameText(view)}` }],
-      structuredContent: view,
+      content: [{ type: 'text', text: `${message}\n\nCurrent position:\n${gameText(shown)}` }],
+      structuredContent: shown,
     };
   }
 }
@@ -118,19 +124,4 @@ function staleError(actual: number | undefined, expected: number) {
     'stale_state',
     `You passed ply ${expected} but the game ${where}. Nothing was changed. Review the current position below.`,
   );
-}
-
-function withoutAsciiBoard(result: CallToolResult): CallToolResult {
-  const view = result.structuredContent as GameView | undefined;
-  if (!view?.board) return result;
-  const shown = omitBoard(view);
-  return {
-    ...result,
-    content: [{ type: 'text', text: gameText(shown) }],
-    structuredContent: shown,
-  };
-}
-
-function omitBoard(view: GameView): GameView {
-  return { ...view, board: undefined };
 }

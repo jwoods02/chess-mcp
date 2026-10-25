@@ -1,4 +1,4 @@
-import type { GameView } from '@chess-mcp/shared';
+import type { GameView, Level, Player } from '@chess-mcp/shared';
 import { useState } from 'react';
 import {
   callTool,
@@ -10,7 +10,7 @@ import {
 } from '../lib/host.ts';
 
 export interface Choice {
-  args: { white: string; black: string; coaching: string; opponentLevel: string };
+  args: { white: Player; black: Player; coaching: string; opponentLevel: Level };
   /** The choice in words, for the chat: "I play White against Jev at beginner level, …". */
   text: string;
 }

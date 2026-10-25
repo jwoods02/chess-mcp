@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { SHOWS_BOARD } from '../board-ui.ts';
 import { applyMove, ChessError, hasJev } from '../chess/game.ts';
 import { playJevReply } from '../opponents/reply.ts';
-import { changeGame, gameIdInput, gameResult, handle, plyInput, type ToolDeps } from './common.ts';
+import { changeGame, gameIdInput, handle, plyInput, type ToolDeps } from './common.ts';
 
 // The human's move in a game against Jev. Jev replies inside the same call, so unlike
 // submit_human_move this shows the board: the human needs to see Jev's move. The board also calls it
@@ -31,7 +31,7 @@ export function registerPlayAgainstJev(server: McpServer, { store, jev }: ToolDe
       _meta: SHOWS_BOARD,
     },
     ({ gameId, ply, move }) =>
-      handle(server, store, gameId, async () => {
+      handle(server, store, gameId, async (gameResult) => {
         const { game, ended } = await changeGame(store, gameId, ply, (g) => {
           if (!hasJev(g)) {
             throw new ChessError(

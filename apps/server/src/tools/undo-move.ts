@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { SHOWS_BOARD } from '../board-ui.ts';
 import { hasJev, undo } from '../chess/game.ts';
 import { playJevReply } from '../opponents/reply.ts';
-import { changeGame, gameIdInput, gameResult, handle, plyInput, type ToolDeps } from './common.ts';
+import { changeGame, gameIdInput, handle, plyInput, type ToolDeps } from './common.ts';
 
 export function registerUndoMove(server: McpServer, { store, jev }: ToolDeps) {
   registerAppTool(
@@ -26,7 +26,7 @@ export function registerUndoMove(server: McpServer, { store, jev }: ToolDeps) {
       _meta: SHOWS_BOARD,
     },
     ({ gameId, ply, plies }) =>
-      handle(server, store, gameId, async () => {
+      handle(server, store, gameId, async (gameResult) => {
         let taken = 0;
         const { game, ended } = await changeGame(store, gameId, ply, (g) => {
           const undone = undo(g, plies);

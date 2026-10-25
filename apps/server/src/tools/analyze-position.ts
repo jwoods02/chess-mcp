@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { moveFacts, positionFacts } from '../chess/facts.ts';
 import { previewLine } from '../chess/game.ts';
-import { factsText, positionText } from '../chess/text.ts';
+import { factsText, positionText } from '../view/text.ts';
 import { gameIdInput, handle, loadGame, type ToolDeps } from './common.ts';
 
 // Read-only, so no `ply` and no board: the stored game never changes.

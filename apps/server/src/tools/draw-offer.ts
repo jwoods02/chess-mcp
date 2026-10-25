@@ -1,8 +1,9 @@
 import { Color, GameView } from '@chess-mcp/shared';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { colorName, draw, type Game } from '../chess/game.ts';
-import { changeGame, gameIdInput, gameResult, handle, plyInput, type ToolDeps } from './common.ts';
+import { draw, type Game } from '../chess/game.ts';
+import { colorName } from '../chess/names.ts';
+import { changeGame, gameIdInput, handle, plyInput, type ToolDeps } from './common.ts';
 
 export function registerDrawOffer(server: McpServer, { store }: ToolDeps) {
   server.registerTool(
@@ -22,7 +23,7 @@ export function registerDrawOffer(server: McpServer, { store }: ToolDeps) {
       outputSchema: GameView,
     },
     ({ gameId, ply, action, color }) =>
-      handle(server, store, gameId, async () => {
+      handle(server, store, gameId, async (gameResult) => {
         const { game, ended } = await changeGame(store, gameId, ply, (g) => draw(g, action, color));
         return gameResult(game, { ended, note: drawNote(action, color, game) });
       }),
