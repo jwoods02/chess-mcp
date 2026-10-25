@@ -12,7 +12,9 @@ import {
 } from './game.ts';
 
 const newGame = (startFen?: string) => createGame({ white: 'human', black: 'llm', startFen });
-const play = (game: Game, ...moves: string[]) => moves.reduce(applyMove, game);
+/** Plays a move for whoever's turn it is. */
+const move = (game: Game, input: string) => applyMove(game, input, toView(game).toMove ?? 'human');
+const play = (game: Game, ...moves: string[]) => moves.reduce(move, game);
 
 function errorCode(fn: () => unknown) {
   try {
@@ -58,15 +60,20 @@ describe('applyMove', () => {
     expect(view.toMove).toBe('human');
   });
 
+  test('only the player whose turn it is can move', () => {
+    expect(errorCode(() => applyMove(newGame(), 'e4', 'llm'))).toBe('not_your_turn');
+    expect(() => applyMove(newGame(), 'e4', 'llm')).toThrow('White is played by the human');
+  });
+
   test('rejects illegal moves and lists the legal ones', () => {
-    expect(() => applyMove(newGame(), 'e5')).toThrow(/Legal moves: .*e4/);
+    expect(() => move(newGame(), 'e5')).toThrow(/Legal moves: .*e4/);
   });
 
   test('requires the promotion piece', () => {
     const game = newGame('8/4P3/8/8/8/8/8/k6K w - - 0 1');
-    expect(() => applyMove(game, 'e7e8')).toThrow(/say which piece/);
-    expect(() => applyMove(game, 'e8')).toThrow(/say which piece/);
-    expect(toView(applyMove(game, 'e7e8q')).moves).toEqual(['e8=Q']);
+    expect(() => move(game, 'e7e8')).toThrow(/say which piece/);
+    expect(() => move(game, 'e8')).toThrow(/say which piece/);
+    expect(toView(move(game, 'e7e8q')).moves).toEqual(['e8=Q']);
   });
 
   test('ends the game on checkmate', () => {
@@ -80,7 +87,7 @@ describe('applyMove', () => {
   });
 
   test('ends the game on stalemate', () => {
-    const game = applyMove(newGame('k7/8/2Q5/8/8/8/8/7K w - - 0 1'), 'Qb6');
+    const game = move(newGame('k7/8/2Q5/8/8/8/8/7K w - - 0 1'), 'Qb6');
     expect(toView(game)).toMatchObject({ result: '1/2-1/2', termination: 'stalemate' });
   });
 
@@ -91,18 +98,18 @@ describe('applyMove', () => {
   });
 
   test('ends the game on the fifty-move rule', () => {
-    const game = applyMove(newGame('k7/8/8/8/8/8/R7/7K w - - 99 80'), 'Rb2');
+    const game = move(newGame('k7/8/8/8/8/8/R7/7K w - - 99 80'), 'Rb2');
     expect(toView(game).termination).toBe('fifty_move');
   });
 
   test('ends the game on insufficient material', () => {
-    const game = applyMove(newGame('k7/8/8/8/8/8/1r6/K7 w - - 0 1'), 'Kxb2');
+    const game = move(newGame('k7/8/8/8/8/8/1r6/K7 w - - 0 1'), 'Kxb2');
     expect(toView(game).termination).toBe('insufficient_material');
   });
 
   test('cannot move after the game is over', () => {
     const game = play(newGame(), 'f3', 'e5', 'g4', 'Qh4#');
-    expect(errorCode(() => applyMove(game, 'e4'))).toBe('game_over');
+    expect(errorCode(() => move(game, 'e4'))).toBe('game_over');
   });
 });
 
@@ -149,7 +156,7 @@ describe('resign and draws', () => {
 
   test('moving declines an offer, but the offering side can still move', () => {
     const whiteOffers = draw(newGame(), 'offer', 'w');
-    expect(toView(applyMove(whiteOffers, 'e4')).drawOffer).toBe('w');
+    expect(toView(move(whiteOffers, 'e4')).drawOffer).toBe('w');
     expect(toView(play(whiteOffers, 'e4', 'e5')).drawOffer).toBeUndefined();
   });
 });

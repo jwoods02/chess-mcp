@@ -21,10 +21,10 @@ describe.each([
     const game = createGame({ white: 'human', black: 'llm' });
     await store.create(game);
 
-    const afterE4 = applyMove(game, 'e4');
+    const afterE4 = applyMove(game, 'e4', 'human');
     expect(await store.update(afterE4, 0)).toBe(true);
     // A second writer that also started from ply 0 loses.
-    expect(await store.update(applyMove(game, 'd4'), 0)).toBe(false);
+    expect(await store.update(applyMove(game, 'd4', 'human'), 0)).toBe(false);
     expect(await store.get(game.id)).toEqual(afterE4);
   });
 });

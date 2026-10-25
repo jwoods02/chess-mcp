@@ -59,4 +59,8 @@ Before finishing a change, run `pnpm typecheck && pnpm lint && pnpm format:check
   `outputSchema`.
 - Tests sit next to the code as `*.test.ts`. Cover chess rules in unit tests and drive tools end to end
   through `app.request('/mcp', …)`.
+- Prompt text (server instructions, tool descriptions, result text) is written for current Claude
+  models: plain wording with the reason behind a rule, and what to do rather than what not to do. No
+  `NEVER`/`CRITICAL`/`MUST` shouting; it makes recent models overreact. See Anthropic's prompting best
+  practices.
 - Commits: conventional style (`feat:`, `fix:`, `docs:`, `chore:`), small and focused.

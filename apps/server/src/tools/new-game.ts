@@ -15,8 +15,8 @@ export function registerNewGame(server: McpServer, store: GameStore) {
       title: 'New chess game',
       description:
         'Start a new chess game. Each side is played by the "human" or by you, the "llm". ' +
-        'The server enforces the rules and stores the game: never track the board yourself, ' +
-        'always use the position in the latest tool result.',
+        'The server enforces the rules and stores the game, so read the position from the latest ' +
+        'tool result; a board you track yourself drifts.',
       inputSchema: z.object({
         white: Player.describe('Who plays White'),
         black: Player.describe('Who plays Black'),

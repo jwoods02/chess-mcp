@@ -14,9 +14,10 @@ export const plyInput = z
   );
 
 /** A successful result: the full text board plus the GameView as structured content. */
-export function gameResult(game: Game): CallToolResult {
+export function gameResult(game: Game, note?: string): CallToolResult {
   const view = toView(game);
-  return { content: [{ type: 'text', text: gameText(view) }], structuredContent: view };
+  const text = note ? `${gameText(view)}\n${note}` : gameText(view);
+  return { content: [{ type: 'text', text }], structuredContent: view };
 }
 
 export async function loadGame(store: GameStore, gameId: string): Promise<Game> {

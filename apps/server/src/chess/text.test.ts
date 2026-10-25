@@ -28,7 +28,7 @@ test('flips the board for Black', () => {
 });
 
 test('tells the model what to do next', () => {
-  const game = applyMove(createGame({ white: 'human', black: 'llm' }), 'e4');
+  const game = applyMove(createGame({ white: 'human', black: 'llm' }), 'e4', 'human');
   const text = gameText(toView(game));
   expect(text).toContain('Moves: 1. e4');
   expect(text).toContain('Last move: e4 (human)');

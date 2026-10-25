@@ -12,10 +12,11 @@ export function registerMakeMove(server: McpServer, store: GameStore) {
     server,
     'make_move',
     {
-      title: 'Make a chess move',
+      title: 'Make your chess move',
       description:
-        'Play a move in a chess game for the side to move, whether that is the human (relay the move ' +
-        'they told you) or you. Accepts SAN ("Nf3", "O-O", "e8=Q") or UCI ("g1f3", "e7e8q"). ' +
+        'Play your own move in a chess game, when the side to move is played by you (the "llm"). ' +
+        'Shows the board to the human. For a move the human told you, use submit_human_move instead. ' +
+        'Accepts SAN ("Nf3", "O-O", "e8=Q") or UCI ("g1f3", "e7e8q"). ' +
         'Illegal moves are rejected with the list of legal moves.',
       inputSchema: z.object({
         gameId: gameIdInput,
@@ -27,7 +28,7 @@ export function registerMakeMove(server: McpServer, store: GameStore) {
     },
     ({ gameId, ply, move }) =>
       handle(store, gameId, async () =>
-        gameResult(await changeGame(store, gameId, ply, (game) => applyMove(game, move))),
+        gameResult(await changeGame(store, gameId, ply, (game) => applyMove(game, move, 'llm'))),
       ),
   );
 }

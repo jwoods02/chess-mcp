@@ -32,10 +32,13 @@ The foundation: a human and an agent can play a complete, legal game of chess ov
 - A chess.com-style board (light/dark squares, piece icons, coordinates) rendered inline when a
   game tool is called.
 - Highlights for the last move and for check. The board is oriented to the human's colour.
-- A move list and status panel.
+- A result line when the game ends. Moves and whose turn it is stay in the chat, not the board.
 - Follows the host theme (light/dark).
 - **Stretch:** the human moves by drag/drop or click-click on the board. The move goes straight to the
   server and the agent is told about it (see [architecture § MCP App](../architecture.md#mcp-app-board-ui)).
+- **Stretch experiment:** one live board per game instead of one per round. The board updates in place
+  for your moves and the assistant's replies, and may float while the chat scrolls. Try it behind a
+  setting and compare how each feels (see [architecture § When the board is shown](../architecture.md#when-the-board-is-shown)).
   This includes a promotion picker and showing legal-move dots.
 
 ## M3 — Opponents: Jev

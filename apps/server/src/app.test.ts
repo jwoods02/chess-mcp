@@ -36,7 +36,17 @@ test('serves the board UI as an MCP App resource', async () => {
   expect(read.result.contents[0].text).toContain('<div id="root">');
 });
 
-test('lists the game tools, linking those that change the board to the UI', async () => {
+test('tells the model how to talk about the game', async () => {
+  const { result } = await rpc('initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'test', version: '0' },
+  });
+  expect(result.instructions).toContain('same turn');
+  expect(result.instructions).toContain('leave them out of your reply');
+});
+
+test('lists the game tools, showing the board only when a human needs to see a new position', async () => {
   const { result } = await rpc('tools/list');
   const tools = Object.fromEntries(result.tools.map((t: { name: string }) => [t.name, t]));
   expect(Object.keys(tools).sort()).toEqual([
@@ -46,10 +56,13 @@ test('lists the game tools, linking those that change the board to the UI', asyn
     'make_move',
     'new_game',
     'resign_game',
+    'submit_human_move',
     'undo_move',
   ]);
-  expect(tools.make_move._meta.ui.resourceUri).toBe(BOARD_URI);
-  expect(tools.legal_moves._meta).toBeUndefined();
+  const showsBoard = Object.keys(tools).filter(
+    (name) => tools[name]._meta?.ui?.resourceUri === BOARD_URI,
+  );
+  expect(showsBoard.sort()).toEqual(['get_game', 'make_move', 'new_game', 'undo_move']);
 });
 
 test('plays a game to checkmate through the tools', async () => {
@@ -57,10 +70,15 @@ test('plays a game to checkmate through the tools', async () => {
   const { gameId } = start.structuredContent;
   expect(start.content[0]!.text).toContain('Waiting for the human');
 
+  // The human's moves are relayed with submit_human_move; the assistant plays with make_move.
   const moves = ['f3', 'e5', 'g4', 'Qh4#'];
   let result = start;
   for (const [ply, move] of moves.entries()) {
-    result = await callTool('make_move', { gameId, ply, move });
+    result = await callTool(ply % 2 === 0 ? 'submit_human_move' : 'make_move', {
+      gameId,
+      ply,
+      move,
+    });
     expect(result.isError).toBeFalsy();
   }
 
@@ -76,15 +94,34 @@ test('rejects illegal moves and stale plies, showing the current board', async (
   const { structuredContent } = await callTool('new_game', { white: 'human', black: 'llm' });
   const { gameId } = structuredContent;
 
-  const illegal = await callTool('make_move', { gameId, ply: 0, move: 'e5' });
+  const illegal = await callTool('submit_human_move', { gameId, ply: 0, move: 'e5' });
   expect(illegal.isError).toBe(true);
   expect(illegal.content[0]!.text).toContain('Error [illegal_move]');
 
-  await callTool('make_move', { gameId, ply: 0, move: 'e4' });
-  const stale = await callTool('make_move', { gameId, ply: 0, move: 'd4' });
+  await callTool('submit_human_move', { gameId, ply: 0, move: 'e4' });
+  const stale = await callTool('submit_human_move', { gameId, ply: 0, move: 'd4' });
   expect(stale.isError).toBe(true);
   expect(stale.content[0]!.text).toContain('Error [stale_state]');
   expect(stale.structuredContent.moves).toEqual(['e4']);
+});
+
+test('points the model at the right move tool', async () => {
+  const { structuredContent } = await callTool('new_game', { white: 'human', black: 'llm' });
+  const wrongTool = await callTool('make_move', {
+    gameId: structuredContent.gameId,
+    ply: 0,
+    move: 'e4',
+  });
+  expect(wrongTool.isError).toBe(true);
+  expect(wrongTool.content[0]!.text).toContain('Error [not_your_turn]');
+  expect(wrongTool.content[0]!.text).toContain('call submit_human_move with ply 0');
+});
+
+test("asks the model to show the board when a human move leaves a position the human hasn't seen", async () => {
+  const { structuredContent } = await callTool('new_game', { white: 'human', black: 'human' });
+  const { gameId } = structuredContent;
+  const result = await callTool('submit_human_move', { gameId, ply: 0, move: 'e4' });
+  expect(result.content[0]!.text).toContain('call get_game to show them the board');
 });
 
 test('reports an unknown game', async () => {

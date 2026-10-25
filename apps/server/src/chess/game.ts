@@ -25,6 +25,7 @@ export type ErrorCode =
   | 'game_not_found'
   | 'game_over'
   | 'illegal_move'
+  | 'not_your_turn'
   | 'stale_state'
   | 'invalid_fen'
   | 'invalid_undo'
@@ -66,17 +67,27 @@ export function replay(game: Game): Chess {
   return chess;
 }
 
-/** Plays `input` (SAN, UCI or a loose form like "nf3" / "0-0") for the side to move. */
-export function applyMove(game: Game, input: string): Game {
+/**
+ * Plays `input` (SAN, UCI or a loose form like "nf3" / "0-0") for the side to move, which must be
+ * controlled by `by`.
+ */
+export function applyMove(game: Game, input: string, by: Player): Game {
   assertActive(game);
   const chess = replay(game);
   const mover = chess.turn();
+  if (seat(game, mover) !== by) {
+    const side = colorName(mover);
+    throw new ChessError(
+      'not_your_turn',
+      `It's ${side}'s move, and ${side} is played by the ${playerName(seat(game, mover))}.`,
+    );
+  }
   const played = tryMove(chess, input.trim());
   if (!played) {
     throw new ChessError('illegal_move', illegalMoveMessage(chess, input.trim()));
   }
 
-  const move: Move = { san: played.san, uci: played.lan, by: seat(game, mover) };
+  const move: Move = { san: played.san, uci: played.lan, by };
   // A move by the side a draw was offered to declines the offer.
   const drawOffer = game.drawOffer === mover ? game.drawOffer : undefined;
   return withStatus({ ...game, moves: [...game.moves, move], drawOffer }, chess);
@@ -171,6 +182,10 @@ export function seat(game: Game, color: Color): Player {
 
 export function colorName(color: Color): string {
   return color === 'w' ? 'White' : 'Black';
+}
+
+export function playerName(player: Player): string {
+  return player === 'llm' ? 'assistant' : 'human';
 }
 
 // --- helpers ---

@@ -36,10 +36,11 @@ function App() {
           allowDragging: false,
         }}
       />
-      <p>
-        <strong>{statusText(view)}</strong>
-      </p>
-      <p style={{ opacity: 0.8 }}>{numberedMoves(view.moves) || 'No moves yet.'}</p>
+      {view.status === 'finished' && (
+        <p>
+          <strong>{gameOverText(view)}</strong>
+        </p>
+      )}
     </main>
   );
 }
@@ -65,21 +66,8 @@ function kingSquare(fen: string, color: 'w' | 'b'): string {
   return '';
 }
 
-function statusText(view: GameView): string {
-  if (view.status === 'finished') {
-    return `Game over: ${view.result} (${view.termination?.replace(/_/g, ' ')})`;
-  }
-  const side = view.turn === 'w' ? 'White' : 'Black';
-  const who = view.toMove === 'human' ? 'your move' : 'waiting for the assistant';
-  return `${side} to move: ${who}${view.inCheck ? ' (check)' : ''}`;
-}
-
-function numberedMoves(moves: string[]): string {
-  const parts: string[] = [];
-  for (let i = 0; i < moves.length; i += 2) {
-    parts.push(`${i / 2 + 1}. ${moves.slice(i, i + 2).join(' ')}`);
-  }
-  return parts.join(' ');
+function gameOverText(view: GameView): string {
+  return `Game over: ${view.result} (${view.termination?.replace(/_/g, ' ')})`;
 }
 
 export default App;

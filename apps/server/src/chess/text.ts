@@ -1,5 +1,5 @@
-import type { Color, GameView, Player } from '@chess-mcp/shared';
-import { colorName } from './game.ts';
+import type { Color, GameView } from '@chess-mcp/shared';
+import { colorName, playerName } from './game.ts';
 
 /** The full text response for a game: board, FEN, moves, status and what should happen next. */
 export function gameText(view: GameView): string {
@@ -46,7 +46,7 @@ function status(view: GameView): string {
   if (view.toMove === 'llm') {
     return `${side} to move.${check} It's your turn (you play ${side}): call make_move with ply ${view.ply}.`;
   }
-  return `${side} to move.${check} Waiting for the human: ask for their move, then call make_move with ply ${view.ply}.`;
+  return `${side} to move.${check} Waiting for the human: ask for their move, then call submit_human_move with ply ${view.ply}.`;
 }
 
 function numberedMoves(moves: string[]): string {
@@ -55,8 +55,4 @@ function numberedMoves(moves: string[]): string {
     parts.push(`${i / 2 + 1}. ${moves.slice(i, i + 2).join(' ')}`);
   }
   return parts.join(' ');
-}
-
-function playerName(player: Player): string {
-  return player === 'llm' ? 'assistant' : 'human';
 }

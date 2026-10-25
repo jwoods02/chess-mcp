@@ -1,15 +1,12 @@
 import { Color, GameView } from '@chess-mcp/shared';
-import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { SHOWS_BOARD } from '../board-ui.ts';
 import { draw } from '../chess/game.ts';
 import type { GameStore } from '../store/store.ts';
 import { changeGame, gameIdInput, gameResult, handle, plyInput } from './common.ts';
 
 export function registerDrawOffer(server: McpServer, store: GameStore) {
-  registerAppTool(
-    server,
+  server.registerTool(
     'draw_offer',
     {
       title: 'Offer, accept or decline a draw',
@@ -24,7 +21,6 @@ export function registerDrawOffer(server: McpServer, store: GameStore) {
         color: Color.describe('The side taking this action: "w" or "b"'),
       }),
       outputSchema: GameView,
-      _meta: SHOWS_BOARD,
     },
     ({ gameId, ply, action, color }) =>
       handle(store, gameId, async () =>

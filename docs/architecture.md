@@ -157,7 +157,7 @@ The model and the board UI can both act on a game, and either might be looking a
 One mechanism covers both cases:
 
 - `ply` is the number of half-moves played (`moves.length`, 0 at the start). Every response includes it.
-- Every tool that changes a game (`make_move`, `undo_move`, `resign_game`, `draw_offer`) **requires**
+- Every tool that changes a game (`make_move`, `submit_human_move`, `undo_move`, `resign_game`, `draw_offer`) **requires**
   the `ply` the caller last saw. If it doesn't match the game, nothing changes and the call returns
   `stale_state` with the current board. The model is never surprised by a move it didn't see.
 - The database write is conditional on the same number (`UPDATE … WHERE id = ? AND ply = ?`). If two
@@ -209,8 +209,12 @@ code. We'll add columns or tables when a real query needs them.
   - `structuredContent`: a `GameView`, which the board UI renders.
 - Rule violations return `isError: true` with a `code`, a message and the current text board, so the
   model can recover in one step.
-- Tool descriptions tell the model: _"Never track the board yourself. Always use the position in the
-  latest tool result."_
+- Server `instructions` (sent on `initialize`) tell the model to relay the human's move and play its
+  reply in the same turn, to stay conversational, and, when the board is shown inline, not to repeat
+  the board, FEN, moves or ply. The server is stateless, so it can't tell per call whether the client
+  renders apps; the instruction is conditional and the model decides.
+- Tool descriptions tell the model: _"Read the position from the latest tool result; a board you track
+  yourself drifts."_
 
 ### GameView
 
@@ -266,22 +270,53 @@ ASCII letters (more reliable for models than Unicode glyphs), flipped when the h
 
 ### M1 tools
 
-| Tool          | Input                                                              | Notes                                                                             |
-| ------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `new_game`    | `{ white: Player, black: Player, startFen? }`                      | Returns a new UUID. Shows the board.                                              |
-| `get_game`    | `{ gameId }`                                                       | Shows the board.                                                                  |
-| `make_move`   | `{ gameId, ply, move }`                                            | Plays for the side to move. Shows the board. Visible to the model **and** the UI. |
-| `legal_moves` | `{ gameId, square? }`                                              | SAN list, optionally for one piece.                                               |
-| `undo_move`   | `{ gameId, ply, plies?: number }`                                  | Default 2 (back to the human's turn). Shows the board.                            |
-| `resign_game` | `{ gameId, ply, color }`                                           | `color` = the side resigning. Shows the board.                                    |
-| `draw_offer`  | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | `color` = the side acting. See [Draw offers](#draw-offers). Shows the board.      |
+| Tool                | Input                                                              | Shows the board | Notes                                                                       |
+| ------------------- | ------------------------------------------------------------------ | --------------- | --------------------------------------------------------------------------- |
+| `new_game`          | `{ white: Player, black: Player, startFen? }`                      | ✅              | Returns a new UUID.                                                         |
+| `get_game`          | `{ gameId }`                                                       | ✅              | Also how the model shows the board after a human move when needed.          |
+| `make_move`         | `{ gameId, ply, move }`                                            | ✅              | The **assistant's** move. Rejected (`not_your_turn`) if a human is to move. |
+| `submit_human_move` | `{ gameId, ply, move }`                                            | –               | Relays a move the **human** made. Rejected if the assistant is to move.     |
+| `legal_moves`       | `{ gameId, square? }`                                              | –               | SAN list, optionally for one piece.                                         |
+| `undo_move`         | `{ gameId, ply, plies?: number }`                                  | ✅              | Default 2 (back to the human's turn).                                       |
+| `resign_game`       | `{ gameId, ply, color }`                                           | –               | `color` = the side resigning.                                               |
+| `draw_offer`        | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | –               | `color` = the side acting. See [Draw offers](#draw-offers).                 |
 
 `ply` is the guard described in [Staleness and concurrency](#staleness-and-concurrency-the-ply-guard).
-"Shows the board" means the tool is linked to the board UI (`_meta.ui.resourceUri`).
+"Shows the board" means the tool is linked to the board UI (`_meta.ui.resourceUri`). See
+[When the board is shown](#when-the-board-is-shown).
+
+### When the board is shown
+
+The host draws a new board for **every** call to a board-linked tool, and whether a tool is linked
+is fixed in the tool list, not chosen per call. So the rule is set per tool:
+
+> **Show the board only when a human needs to look at a new position.**
+
+- The human already knows the move they just made, so `submit_human_move` is text-only. The board
+  appears with the assistant's reply (`make_move`), showing both moves: one board per round.
+- Resigning and draw offers don't change the position, so they don't redraw it.
+- When a human move leaves a position a human hasn't seen (the game ended on their move, the next
+  side is also human, or later an engine replied inside the call), the `submit_human_move` result tells
+  the model to call `get_game`. That rule covers human-vs-human, human-vs-Jev and puzzles too.
+- The server enforces which move tool applies (`not_your_turn`), and the error names the right tool,
+  so the model corrects itself.
+
+How this holds up for later modes, compared with the [live board](#mcp-app-board-ui) stretch goal:
+
+| Scenario                             | Per-round board (now)                                          | Live board (stretch)                                    |
+| ------------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------- |
+| Human vs assistant                   | One board per round                                            | One board per game                                      |
+| Human delivers mate / human vs human | Model calls `get_game` when prompted                           | Board updates in place                                  |
+| Human vs Jev (M3)                    | Jev replies inside `submit_human_move`; model calls `get_game` | Drag, Jev replies in the same call, no model round trip |
+| Coaching: question before your move  | Board and question arrive together                             | Works; the board may have scrolled out of view          |
+| Coaching: hints with arrows          | Needs a "show board with arrows" tool (fresh board)            | Arrows stored on the game; the live board picks them up |
+| Coaching: post-game review           | Needs a "show board at ply N" tool                             | Same need; the board steps through in place             |
+| Puzzles (M4)                         | `submit_puzzle_move` text-only; `get_puzzle` on a new position | Wrong drag snaps back instantly; model coaches in chat  |
+| Text-only clients                    | Unaffected: every result has the full text board               | Unaffected                                              |
 
 ### Error codes
 
-`game_not_found`, `game_over`, `illegal_move` (includes the legal moves), `stale_state` (includes
+`game_not_found`, `game_over`, `illegal_move`, `not_your_turn` (wrong move tool for the side to move) (includes the legal moves), `stale_state` (includes
 the current view), `invalid_fen`, `invalid_undo` (nothing to take back), `invalid_draw_action` (e.g.
 accepting when no offer is pending).
 
@@ -330,10 +365,10 @@ config.
 App connects → ontoolresult(result) → render(result.structuredContent as GameView)
 ```
 
-- **M2 (display):** a board from `fen` in `orientation`, highlights for the last move and check, a move
-  list and a status line. It follows the host light/dark theme.
+- **M2 (display):** a board from `fen` in `orientation`, highlights for the last move and check, and a
+  result line once the game is over. No move list or turn text: the chat already says those. It follows the host light/dark theme.
 - **Stretch (human moves on the board):**
-  1. Drop a piece → `app.callServerTool({ name: 'make_move', arguments: { gameId, ply, move } })`.
+  1. Drop a piece → `app.callServerTool({ name: 'submit_human_move', arguments: { gameId, ply, move } })`.
   2. Re-render from the returned view. If Jev replied, that move is already in it.
   3. Tell the model:
      - If the LLM is next to move → `app.sendMessage("I played Nf3")`. The model then calls
@@ -343,6 +378,16 @@ App connects → ontoolresult(result) → render(result.structuredContent as Gam
   4. On `stale_state`, re-render from the view returned with the error.
 - A promotion picker is needed for the stretch goal (`react-chessboard` handles the drag, we pick the
   piece).
+- **Stretch experiment: one live board per game.** Instead of a board per round, the board drawn by
+  `new_game` (or `get_game`) stays live for the whole game:
+  - Neither move tool is board-linked. The human moves by dragging; the app submits the move itself,
+    then `sendMessage`s the model when it's the assistant's turn.
+  - The board learns about the assistant's reply by polling an app-only `get_game` (tool
+    `visibility: ['app']`, hidden from the model).
+  - Optionally it asks the host for `pip` display mode so it floats while the chat scrolls.
+  - Board-linking is fixed per tool, so both modes can't run at once. Put it behind a server setting
+    (`BOARD_MODE=per-round|live`) and compare how each feels before choosing.
+  - Risks: host support for `sendMessage` and `pip` varies, and an inline board scrolls out of view.
 
 ## Opponents (M3)
 
@@ -359,7 +404,7 @@ interface Opponent {
 
 - The server validates every returned move. On failure or timeout it retries once, then falls back to
   a random legal move (recorded in `meta`).
-- When `make_move` leaves the turn with an engine seat, the server plays the engine's reply in
+- When a move (usually `submit_human_move`) leaves the turn with an engine seat, the server plays the engine's reply in
   the same call and returns both moves.
 
 ### Jev
@@ -454,6 +499,7 @@ interface CoachingBlock {
 | 6   | Every tool returns full text **and** `structuredContent`                    | Text-only clients are first-class.                                                       |
 | 7   | Mutating tools require the `ply` the caller saw; DB write conditional on it | One mechanism stops stale views and racing writes. No separate version field.            |
 | 8   | React with `react-chessboard`                                               | MIT, inline SVG pieces, drag/drop for the stretch goal.                                  |
-| 9   | Engine replies are played inside `make_move`                                | One call per human move. Simpler for the model and the UI.                               |
+| 9   | Engine replies are played inside the move call that hands them the turn     | One call per human move. Simpler for the model and the UI.                               |
 | 10  | No auth. Game UUIDs are the only identifier.                                | Out of scope for v1.                                                                     |
 | 11  | Local only, no deploy                                                       | Focus on the product first.                                                              |
+| 12  | Separate `make_move` (assistant) and `submit_human_move` (human) tools      | Board-linking is per tool; the human's own move shouldn't redraw the board.              |
