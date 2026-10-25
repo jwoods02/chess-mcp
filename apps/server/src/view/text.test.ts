@@ -55,3 +55,11 @@ test('numbers moves correctly when Black moves first', () => {
   );
   expect(gameText(viewOf(game))).toContain('Moves: 12. ... Kd7');
 });
+
+test("says when Jev failed and a random move was played instead of Jev's", () => {
+  const game = applyMove(createGame({ white: 'human', black: 'jev' }), 'e4', 'human');
+  const fallback = applyMove(game, 'e5', 'jev', { fallback: 'random move, Jev failed: timeout' });
+  expect(gameText(viewOf(fallback))).toContain(
+    'Last move: e5 (Jev was unavailable, so a random legal move was played)',
+  );
+});

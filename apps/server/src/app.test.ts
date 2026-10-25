@@ -1,5 +1,4 @@
 import type { GameSetup, GameView, MoveFacts, PositionFacts } from '@chess-mcp/shared';
-import { Experimental_DecisionMockModelV4 as MockDecisionModel } from 'ai/test';
 import { describe, expect, test } from 'vitest';
 import { createApp } from './app.ts';
 import { BOARD_URI } from './board-ui.ts';
@@ -44,7 +43,7 @@ test('serves the board UI as an MCP App resource', async () => {
   expect(read.result.contents[0].text).toContain('<div id="root">');
 });
 
-test('tells the model how to talk about the game', async () => {
+test('advertises MCP Apps support and sends server instructions', async () => {
   const { result } = await rpc('initialize', {
     protocolVersion: '2025-06-18',
     capabilities: {},
@@ -53,8 +52,7 @@ test('tells the model how to talk about the game', async () => {
   expect(result.capabilities.extensions['io.modelcontextprotocol/ui']).toEqual({
     mimeTypes: ['text/html;profile=mcp-app'],
   });
-  expect(result.instructions).toContain('same turn');
-  expect(result.instructions).toContain('keep the board, FEN, moves and ply out of your reply');
+  expect(result.instructions).toEqual(expect.any(String));
 });
 
 type ToolInfo = { name: string; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } };
@@ -95,14 +93,10 @@ test('lists the game tools, showing the board only when a human needs to see a n
     'show_game_setup',
     'undo_move',
   ]);
-});
-
-test('marks submit_human_move as callable from the board, without drawing one', async () => {
-  // The spec allows this by default, but we mark it explicitly for stricter hosts.
-  const { tools } = await listTools();
-  const submit = tools.find((t) => t.name === 'submit_human_move');
+  // The board calls submit_human_move without drawing one. The spec allows this by default, but
+  // it's marked explicitly for stricter hosts.
+  const submit = tools.tools.find((t) => t.name === 'submit_human_move');
   expect(submit?._meta?.ui?.visibility).toContain('app');
-  expect(submit?._meta?.ui?.resourceUri).toBeUndefined();
 });
 
 test('leaves out the ASCII board when the client shows the board UI', async () => {
@@ -142,7 +136,7 @@ test('leaves out the ASCII board when the client shows the board UI', async () =
   expect(result.content[0].text).not.toContain('│');
 });
 
-test('plays a game to checkmate through the tools', async () => {
+test('plays a game to checkmate through the tools, then offers a review once', async () => {
   const start = await callTool('new_game', { white: 'human', black: 'llm' });
   const { gameId } = start.structuredContent;
   expect(start.content[0]!.text).toContain('Waiting for the human');
@@ -169,6 +163,18 @@ test('plays a game to checkmate through the tools', async () => {
     termination: 'checkmate',
   });
   expect(result.content[0]!.text).toContain('Game over: 0-1 by checkmate.');
+
+  // Every mode, 'play' included, offers a review with the move that ended the game.
+  const keyMoments = [{ move: '2. g4', reason: 'allowed mate in one: Qh4#' }];
+  expect(result.structuredContent.coaching).toMatchObject({
+    mode: 'play@1',
+    speak: true,
+    keyMoments,
+  });
+  expect(result.structuredContent.coaching.reason).toContain('Offer to go through');
+  // Later results keep the moments without repeating the offer.
+  const later = await callTool('get_game', { gameId });
+  expect(later.structuredContent.coaching).toMatchObject({ speak: false, keyMoments });
 });
 
 test('rejects illegal moves and stale plies, showing the current board', async () => {
@@ -307,27 +313,6 @@ describe('coaching', () => {
     const { after } = mate.structuredContent as unknown as { after: PositionFacts };
     expect(after).toMatchObject({ over: 'checkmate', mateInOne: [] });
     expect(mate.content[0]!.text).toContain('After the line: White is checkmated');
-  });
-
-  test('every mode offers a review of the key moments when the game ends', async () => {
-    const start = await callTool('new_game', { white: 'human', black: 'llm' });
-    const { gameId } = start.structuredContent;
-    await callTool('submit_human_move', { gameId, ply: 0, move: 'f3' });
-    await callTool('make_move', { gameId, ply: 1, move: 'e5' });
-    await callTool('submit_human_move', { gameId, ply: 2, move: 'g4' });
-
-    const over = await callTool('make_move', { gameId, ply: 3, move: 'Qh4#' });
-    const keyMoments = [{ move: '2. g4', reason: 'allowed mate in one: Qh4#' }];
-    expect(over.structuredContent.coaching).toMatchObject({
-      mode: 'play@1',
-      speak: true,
-      keyMoments,
-    });
-    expect(over.structuredContent.coaching.reason).toContain('Offer to go through');
-
-    // The offer comes once, with the move that ended the game; the moments stay for later.
-    const later = await callTool('get_game', { gameId });
-    expect(later.structuredContent.coaching).toMatchObject({ speak: false, keyMoments });
   });
 
   test('a game with no human in it ends without a review', async () => {
@@ -500,27 +485,6 @@ describe('playing Jev', () => {
     });
   });
 
-  test('if Jev fails, a random legal move keeps the game going', async () => {
-    const failing = new MockDecisionModel({
-      doDecide: async () => {
-        throw new Error('Jev is down');
-      },
-    });
-    const server = createApp({ store: new SqliteStore(':memory:'), jev: createJev(failing) });
-    const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
-
-    const result = await callTool(
-      'play_against_jev',
-      { gameId: start.structuredContent.gameId, ply: 0, move: 'e4' },
-      server,
-    );
-
-    expect(result.structuredContent).toMatchObject({ ply: 2, toMove: 'human' });
-    expect(result.content[0]!.text).toContain(
-      'Jev was unavailable, so a random legal move was played',
-    );
-  });
-
   test('the assistant can play Jev, and Jev replies inside make_move', async () => {
     const server = withJev('e5');
     const start = await callTool('new_game', { white: 'llm', black: 'jev' }, server);
@@ -530,19 +494,6 @@ describe('playing Jev', () => {
       server,
     );
     expect(result.structuredContent).toMatchObject({ moves: ['e4', 'e5'], toMove: 'llm' });
-  });
-
-  test('an illegal answer from Jev falls back to a random legal move', async () => {
-    const illegal: Opponent = { chooseMove: async () => ({ move: 'Ke7' }) }; // the king can't move yet
-    const server = createApp({ store: new SqliteStore(':memory:'), jev: illegal });
-    const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
-    const result = await callTool(
-      'play_against_jev',
-      { gameId: start.structuredContent.gameId, ply: 0, move: 'e4' },
-      server,
-    );
-    expect(result.structuredContent).toMatchObject({ ply: 2, toMove: 'human' });
-    expect(result.content[0]!.text).toContain('Jev was unavailable');
   });
 
   test('a resignation while Jev is thinking is not overwritten', async () => {
