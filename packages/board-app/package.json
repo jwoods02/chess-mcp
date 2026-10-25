@@ -1,0 +1,27 @@
+{
+  "name": "@chess-mcp/board-app",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./index.html": "./dist/index.html"
+  },
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@chess-mcp/shared": "workspace:*",
+    "@modelcontextprotocol/ext-apps": "catalog:",
+    "react": "catalog:",
+    "react-chessboard": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-singlefile": "catalog:"
+  }
+}

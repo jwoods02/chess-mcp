@@ -29,7 +29,7 @@ If a change contradicts the docs, update the docs in the same change (or ask fir
 
 ```
 apps/server/        Hono + MCP server (tools, chess logic, storage); runs .ts directly in Node
-packages/board-app/ MCP App UI (React + react-chessboard) → dist/board.html (single file)
+packages/board-app/ MCP App UI (React + react-chessboard) → dist/index.html (single file)
 packages/shared/    zod schemas and types shared by server and UI
 docs/               product and architecture docs
 ```

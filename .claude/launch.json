@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "server",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "port": 3000
+    },
+    {
+      "name": "inspector",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["inspect"],
+      "port": 6274
+    }
+  ]
+}

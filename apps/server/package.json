@@ -1,0 +1,25 @@
+{
+  "name": "@chess-mcp/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@chess-mcp/board-app": "workspace:*",
+    "@chess-mcp/shared": "workspace:*",
+    "@hono/node-server": "catalog:",
+    "@modelcontextprotocol/ext-apps": "catalog:",
+    "@modelcontextprotocol/hono": "catalog:",
+    "@modelcontextprotocol/server": "catalog:",
+    "better-sqlite3": "catalog:",
+    "chess.js": "catalog:",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "catalog:"
+  }
+}

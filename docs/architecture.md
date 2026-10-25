@@ -11,20 +11,20 @@ another store is coming) and the opponent interface (Jev, then possibly others).
 
 ## Stack
 
-| Concern         | Choice                                                                       |
-| --------------- | ---------------------------------------------------------------------------- |
-| Language        | TypeScript **7** (native `tsc`), ESM, `strict`                               |
-| Runtime         | Node.js 24 LTS. Dev runs `.ts` directly via Node's built-in type stripping.  |
-| HTTP            | **Hono** plus `@hono/node-server`                                            |
+| Concern         | Choice                                                                        |
+| --------------- | ----------------------------------------------------------------------------- |
+| Language        | TypeScript **7** (native `tsc`), ESM, `strict`                                |
+| Runtime         | Node.js 24 LTS. Dev runs `.ts` directly via Node's built-in type stripping.   |
+| HTTP            | **Hono** plus `@hono/node-server`                                             |
 | MCP             | Official SDK v2: `@modelcontextprotocol/server`, `@modelcontextprotocol/hono` |
-| MCP Apps        | `@modelcontextprotocol/ext-apps` (server helpers and the UI `App` class)     |
-| Chess rules     | `chess.js`                                                                   |
-| Schemas         | `zod` 4                                                                      |
-| Storage         | `better-sqlite3`, plain SQL, no ORM                                          |
-| UI              | React 19, `react-chessboard`, Vite with `vite-plugin-singlefile`             |
-| Tests           | Vitest                                                                       |
-| Lint / format   | Oxlint, Oxfmt                                                                |
-| Package manager | pnpm workspaces with a `catalog:` for shared versions                        |
+| MCP Apps        | `@modelcontextprotocol/ext-apps` (server helpers and the UI `App` class)      |
+| Chess rules     | `chess.js`                                                                    |
+| Schemas         | `zod` 4                                                                       |
+| Storage         | `better-sqlite3`, plain SQL, no ORM                                           |
+| UI              | React 19, `react-chessboard`, Vite with `vite-plugin-singlefile`              |
+| Tests           | Vitest                                                                        |
+| Lint / format   | Oxlint, Oxfmt                                                                 |
+| Package manager | pnpm workspaces with a `catalog:` for shared versions                         |
 
 - **Why Hono:** the official SDK ships `@modelcontextprotocol/hono` (`createMcpHonoApp`, which handles
   Host/Origin checks and body parsing) and a web-standard `createMcpHandler(...).fetch`. That is the
@@ -53,7 +53,7 @@ chess-mcp/
 │        ├─ opponents/        # M3: Jev
 │        └─ coaching/         # M5: coaching modes
 ├─ packages/
-│  ├─ board-app/              # MCP App UI → builds to dist/board.html
+│  ├─ board-app/              # MCP App UI → builds to dist/index.html
 │  └─ shared/                 # zod schemas + types shared by server and UI (GameView etc.)
 └─ docs/
 ```
@@ -94,28 +94,34 @@ model and the board UI can each pick up any game with any request.
 
 ```ts
 type Color = 'w' | 'b';
-type Player = 'human' | 'llm' | 'jev';   // who controls a seat; 'jev' arrives in M3
+type Player = 'human' | 'llm' | 'jev'; // who controls a seat; 'jev' arrives in M3
 
 interface Game {
-  id: string;                 // crypto.randomUUID()
+  id: string; // crypto.randomUUID()
   white: Player;
   black: Player;
   startFen: string;
-  moves: Move[];              // canonical history
+  moves: Move[]; // canonical history
   status: 'active' | 'finished';
   result?: '1-0' | '0-1' | '1/2-1/2';
-  termination?: 'checkmate' | 'stalemate' | 'threefold_repetition' | 'fifty_move'
-              | 'insufficient_material' | 'resignation' | 'draw_agreed';
-  coachingMode?: string;      // M5, e.g. 'socratic@1'
+  termination?:
+    | 'checkmate'
+    | 'stalemate'
+    | 'threefold_repetition'
+    | 'fifty_move'
+    | 'insufficient_material'
+    | 'resignation'
+    | 'draw_agreed';
+  coachingMode?: string; // M5, e.g. 'socratic@1'
   createdAt: string;
   updatedAt: string;
 }
 
 interface Move {
-  san: string;                // 'Nf3'
-  uci: string;                // 'g1f3'
+  san: string; // 'Nf3'
+  uci: string; // 'g1f3'
   by: Player;
-  meta?: Record<string, unknown>;  // e.g. Jev's move probabilities (M3)
+  meta?: Record<string, unknown>; // e.g. Jev's move probabilities (M3)
 }
 ```
 
@@ -154,7 +160,7 @@ We say "ply", not "move number", because in chess notation "move 1" covers both 
 interface GameStore {
   get(id: string): Promise<Game | undefined>;
   create(game: Game): Promise<void>;
-  update(game: Game, expectedPly: number): Promise<boolean>;  // false = someone else changed it first
+  update(game: Game, expectedPly: number): Promise<boolean>; // false = someone else changed it first
 }
 ```
 
@@ -197,10 +203,10 @@ interface GameView {
   gameId: string;
   fen: string;
   pgn: string;
-  moves: string[];                    // SAN
+  moves: string[]; // SAN
   ply: number;
   turn: Color;
-  toMove: Player | null;              // who should act next (null when finished)
+  toMove: Player | null; // who should act next (null when finished)
   white: Player;
   black: Player;
   status: 'active' | 'finished';
@@ -208,8 +214,8 @@ interface GameView {
   termination?: string;
   inCheck: boolean;
   lastMove?: { san: string; from: string; to: string; by: Player };
-  orientation: Color;                 // board orientation for the UI: the human's colour
-  coaching?: CoachingBlock;           // M5
+  orientation: Color; // board orientation for the UI: the human's colour
+  coaching?: CoachingBlock; // M5
 }
 ```
 
@@ -239,14 +245,14 @@ ASCII letters (more reliable for models than Unicode glyphs), flipped when the h
 
 ### M1 tools
 
-| Tool                | Input                                                                     | Notes |
-| ------------------- | ------------------------------------------------------------------------- | ----- |
-| `chess_new_game`    | `{ white: Player, black: Player, startFen? }`                             | Returns a new UUID. Shows the board. |
-| `chess_get_game`    | `{ gameId }`                                                              | Shows the board. |
-| `chess_make_move`   | `{ gameId, ply, move, by: 'human' \| 'llm' }`                             | Shows the board. `by` must match the seat to move. Visible to the model **and** the UI. |
-| `chess_legal_moves` | `{ gameId, square? }`                                                     | SAN list, optionally for one piece. |
-| `chess_undo_move`   | `{ gameId, ply, plies?: number }`                                         | Default 2 (back to the human's turn). |
-| `chess_end_game`    | `{ gameId, ply, reason: 'resignation' \| 'draw_agreed', color? }`         | `color` = who resigned. |
+| Tool                | Input                                                             | Notes                                                                                   |
+| ------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `chess_new_game`    | `{ white: Player, black: Player, startFen? }`                     | Returns a new UUID. Shows the board.                                                    |
+| `chess_get_game`    | `{ gameId }`                                                      | Shows the board.                                                                        |
+| `chess_make_move`   | `{ gameId, ply, move, by: 'human' \| 'llm' }`                     | Shows the board. `by` must match the seat to move. Visible to the model **and** the UI. |
+| `chess_legal_moves` | `{ gameId, square? }`                                             | SAN list, optionally for one piece.                                                     |
+| `chess_undo_move`   | `{ gameId, ply, plies?: number }`                                 | Default 2 (back to the human's turn).                                                   |
+| `chess_end_game`    | `{ gameId, ply, reason: 'resignation' \| 'draw_agreed', color? }` | `color` = who resigned.                                                                 |
 
 `ply` is the guard described in [Staleness and concurrency](#staleness-and-concurrency-the-ply-guard).
 "Shows the board" means the tool is linked to the board UI (`_meta.ui.resourceUri`).
@@ -258,13 +264,13 @@ ASCII letters (more reliable for models than Unicode glyphs), flipped when the h
 
 ### Later tools (sketch)
 
-| Milestone | Tool                       | Purpose |
-| --------- | -------------------------- | ------- |
-| M3        | `chess_engine_opinion`     | `{ gameId }`: Jev's move probabilities for the current position, without playing. Useful for coaching. |
+| Milestone | Tool                       | Purpose                                                                                                                                                                                                                                                     |
+| --------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M3        | `chess_engine_opinion`     | `{ gameId }`: Jev's move probabilities for the current position, without playing. Useful for coaching.                                                                                                                                                      |
 | M4        | `chess_build_position`     | `{ pieces: { square, piece, color }[], sideToMove }` or `{ fen }` returns a valid FEN or a list of problems (missing king, pawn on the back rank, side not to move in check…). LLMs are unreliable at writing FENs, so this is how they "describe a board". |
-| M4        | `chess_create_puzzle`      | `{ fen, prompt, solution?: string[], hints?: string[] }`. Validates that the solution is legal. Shows the board. |
-| M4        | `chess_submit_puzzle_move` | `{ puzzleId, move }` returns `{ legal, verdict: 'correct' \| 'incorrect' \| 'open' }` plus coaching. `open` = no fixed solution, so the LLM judges. |
-| M5        | `chess_set_coaching_mode`  | `{ gameId, mode }` |
+| M4        | `chess_create_puzzle`      | `{ fen, prompt, solution?: string[], hints?: string[] }`. Validates that the solution is legal. Shows the board.                                                                                                                                            |
+| M4        | `chess_submit_puzzle_move` | `{ puzzleId, move }` returns `{ legal, verdict: 'correct' \| 'incorrect' \| 'open' }` plus coaching. `open` = no fixed solution, so the LLM judges.                                                                                                         |
+| M5        | `chess_set_coaching_mode`  | `{ gameId, mode }`                                                                                                                                                                                                                                          |
 
 ## MCP App (board UI)
 
@@ -273,16 +279,24 @@ ASCII letters (more reliable for models than Unicode glyphs), flipped when the h
 ```ts
 const BOARD_URI = 'ui://chess/board.html';
 
-registerAppResource(server, BOARD_URI, BOARD_URI, { mimeType: RESOURCE_MIME_TYPE },
-  async () => ({ contents: [{ uri: BOARD_URI, mimeType: RESOURCE_MIME_TYPE, text: boardHtml }] }));
+registerAppResource(server, BOARD_URI, BOARD_URI, { mimeType: RESOURCE_MIME_TYPE }, async () => ({
+  contents: [{ uri: BOARD_URI, mimeType: RESOURCE_MIME_TYPE, text: boardHtml }],
+}));
 
-registerAppTool(server, 'chess_make_move', {
-  description, inputSchema, outputSchema,
-  _meta: { ui: { resourceUri: BOARD_URI } },
-}, handler);
+registerAppTool(
+  server,
+  'chess_make_move',
+  {
+    description,
+    inputSchema,
+    outputSchema,
+    _meta: { ui: { resourceUri: BOARD_URI } },
+  },
+  handler,
+);
 ```
 
-`packages/board-app` builds to a single self-contained `dist/board.html` (Vite with
+`packages/board-app` builds to a single self-contained `dist/index.html` (Vite with
 `vite-plugin-singlefile`), and the server reads it at startup. One bundle serves every game tool.
 `react-chessboard` ships its pieces as inline SVG, so the iframe needs no network access and no CSP
 config.
@@ -312,8 +326,11 @@ App connects → ontoolresult(result) → render(result.structuredContent as Gam
 ```ts
 // opponents/opponent.ts
 interface Opponent {
-  chooseMove(input: { fen: string; history: string[]; legalMoves: string[] }):
-    Promise<{ move: string; meta?: Record<string, unknown> }>;
+  chooseMove(input: {
+    fen: string;
+    history: string[];
+    legalMoves: string[];
+  }): Promise<{ move: string; meta?: Record<string, unknown> }>;
 }
 ```
 
@@ -362,18 +379,21 @@ The server decides _when_ to coach and _which facts_ are relevant. The LLM write
 ```ts
 // coaching/mode.ts
 interface CoachingMode {
-  id: string;                  // 'socratic'
-  version: number;             // recorded on the game as 'socratic@1'
+  id: string; // 'socratic'
+  version: number; // recorded on the game as 'socratic@1'
   description: string;
   allowsUndo: boolean;
   /** Returns guidance for the LLM at this point in the game, or nothing. */
-  coach(event: 'game_started' | 'human_to_move' | 'move_played' | 'game_over',
-        game: GameView, facts: PositionFacts): CoachingBlock | undefined;
+  coach(
+    event: 'game_started' | 'human_to_move' | 'move_played' | 'game_over',
+    game: GameView,
+    facts: PositionFacts,
+  ): CoachingBlock | undefined;
 }
 
 interface CoachingBlock {
-  mode: string;                // 'socratic@1'
-  guidance: string;            // instructions for the LLM, not shown in the UI
+  mode: string; // 'socratic@1'
+  guidance: string; // instructions for the LLM, not shown in the UI
   facts?: Record<string, unknown>;
 }
 ```
@@ -401,16 +421,16 @@ interface CoachingBlock {
 
 ## Decisions
 
-| #  | Decision                                                                 | Why |
-| -- | ------------------------------------------------------------------------ | --- |
-| 1  | Hono plus the official `@modelcontextprotocol/hono`                      | First-party SDK support, small, web-standard. |
-| 2  | Stateless MCP transport, games in a DB keyed by UUID                     | The model and UI share state through the server. Simple. |
-| 3  | Game = `startFen + moves`. FEN is derived.                               | Needed for repetition detection, and it's a single source of truth. |
-| 4  | `better-sqlite3`, one table, JSON column, no ORM or migrations framework | Least code that works. The `GameStore` interface allows swapping later. |
-| 5  | Three packages: `server`, `board-app`, `shared`                          | UI is separate, as required. Everything else stays in the server until it needs to move. |
-| 6  | Every tool returns full text **and** `structuredContent`                 | Text-only clients are first-class. |
-| 7  | Mutating tools require the `ply` the caller saw; DB write conditional on it | One mechanism stops stale views and racing writes. No separate version field. |
-| 8  | React with `react-chessboard`                                            | MIT, inline SVG pieces, drag/drop for the stretch goal. |
-| 9  | Engine replies are played inside `chess_make_move`                       | One call per human move. Simpler for the model and the UI. |
-| 10 | No auth. Game UUIDs are the only identifier.                             | Out of scope for v1. |
-| 11 | Local only, no deploy                                                    | Focus on the product first. |
+| #   | Decision                                                                    | Why                                                                                      |
+| --- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 1   | Hono plus the official `@modelcontextprotocol/hono`                         | First-party SDK support, small, web-standard.                                            |
+| 2   | Stateless MCP transport, games in a DB keyed by UUID                        | The model and UI share state through the server. Simple.                                 |
+| 3   | Game = `startFen + moves`. FEN is derived.                                  | Needed for repetition detection, and it's a single source of truth.                      |
+| 4   | `better-sqlite3`, one table, JSON column, no ORM or migrations framework    | Least code that works. The `GameStore` interface allows swapping later.                  |
+| 5   | Three packages: `server`, `board-app`, `shared`                             | UI is separate, as required. Everything else stays in the server until it needs to move. |
+| 6   | Every tool returns full text **and** `structuredContent`                    | Text-only clients are first-class.                                                       |
+| 7   | Mutating tools require the `ply` the caller saw; DB write conditional on it | One mechanism stops stale views and racing writes. No separate version field.            |
+| 8   | React with `react-chessboard`                                               | MIT, inline SVG pieces, drag/drop for the stretch goal.                                  |
+| 9   | Engine replies are played inside `chess_make_move`                          | One call per human move. Simpler for the model and the UI.                               |
+| 10  | No auth. Game UUIDs are the only identifier.                                | Out of scope for v1.                                                                     |
+| 11  | Local only, no deploy                                                       | Focus on the product first.                                                              |

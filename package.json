@@ -1,0 +1,36 @@
+{
+  "name": "chess-mcp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format:check": "oxfmt --check",
+    "dev": "pnpm --parallel --filter @chess-mcp/board-app --filter @chess-mcp/server dev",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter @chess-mcp/server start",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "lint": "oxlint --type-aware",
+    "format": "oxfmt",
+    "inspect": "mcp-inspector --web --transport http --server-url http://localhost:3000/mcp"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "catalog:",
+    "@types/node": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.15.0",
+      "onFail": "download"
+    }
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@12.15.0"
+}

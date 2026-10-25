@@ -11,13 +11,13 @@ LLMs are bad at chess: they lose track of the board, play illegal moves and hall
 They are good at _explaining_, _questioning_ and _adapting to a person_. This project splits the work
 along those lines:
 
-| Concern                       | Owner                                                             |
-| ----------------------------- | ----------------------------------------------------------------- |
-| Rules, legality, game state   | The server (chess.js). The LLM can never put the board in an illegal state. |
-| Persistence across turns      | The server (game IDs and a database).                             |
+| Concern                       | Owner                                                                                            |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ |
+| Rules, legality, game state   | The server (chess.js). The LLM can never put the board in an illegal state.                      |
+| Persistence across turns      | The server (game IDs and a database).                                                            |
 | Playing strength / intuition  | Pluggable opponents: the LLM itself, **Jev** (a System One model), and later a classical engine. |
-| Teaching, coaching, dialogue  | The LLM, steered by **coaching modes** the server defines.        |
-| Seeing and touching the board | The MCP App UI (with a text board as the fallback).               |
+| Teaching, coaching, dialogue  | The LLM, steered by **coaching modes** the server defines.                                       |
+| Seeing and touching the board | The MCP App UI (with a text board as the fallback).                                              |
 
 The interesting product space is the combination: an LLM coach watching a human play against a
 _different kind_ of AI (Jev), or an LLM building a puzzle and then coaching the human through it.
