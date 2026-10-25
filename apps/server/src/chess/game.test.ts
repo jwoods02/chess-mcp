@@ -81,6 +81,15 @@ describe('applyMove', () => {
     expect(() => move(game, 'e7e8')).toThrow(/say which piece/);
     expect(() => move(game, 'e8')).toThrow(/say which piece/);
     expect(toState(move(game, 'e7e8q')).moves).toEqual(['e8=Q']);
+    // Loose forms with a lowercase piece work too.
+    expect(toState(move(game, 'e8q')).moves).toEqual(['e8=Q']);
+    expect(toState(move(game, 'e8=n')).moves).toEqual(['e8=N']);
+    const capture = newGame('3r4/4P3/8/8/8/8/8/k6K w - - 0 1');
+    expect(toState(move(capture, 'exd8q')).moves).toEqual(['exd8=Q']);
+  });
+
+  test('says so when no move was given', () => {
+    expect(() => move(newGame(), '  ')).toThrow(/^No move was given\. Legal moves for White: /);
   });
 
   test('ends the game on checkmate', () => {

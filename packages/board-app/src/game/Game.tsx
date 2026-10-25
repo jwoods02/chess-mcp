@@ -1,6 +1,6 @@
 import type { GameView } from '@chess-mcp/shared';
 import type { KeyboardEvent } from 'react';
-import { playersText, statusText } from '../lib/chess.ts';
+import { canTakeBack, playersText, statusText } from '../lib/chess.ts';
 import type { McpApp } from '../lib/host.ts';
 import { Button } from '../ui/Button.tsx';
 import { Board } from './Board.tsx';
@@ -21,8 +21,6 @@ export function Game(props: {
   const actions = useGameActions(props.app, view, props.onView, props.onNewGame);
   const idle = history.live && !actions.busy && !actions.pending;
   const canMove = idle && view.status === 'active' && view.toMove === 'human';
-  const canTakeBack =
-    idle && view.moves.length > 0 && (view.toMove === 'human' || view.status === 'finished');
 
   // Arrow keys step through the moves, as on most chess sites.
   function onKeyDown(event: KeyboardEvent) {
@@ -60,7 +58,7 @@ export function Game(props: {
       <div className={styles.row}>
         <HistoryNav at={history.at} latest={view.ply} label={history.label} onGo={history.goTo} />
         <div className={styles.group}>
-          <Button disabled={!canTakeBack} onClick={() => void actions.takeBack()}>
+          <Button disabled={!idle || !canTakeBack(view)} onClick={() => void actions.takeBack()}>
             Take back
           </Button>
           <Button disabled={actions.busy} onClick={() => void actions.newGame()}>

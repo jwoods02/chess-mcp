@@ -1,7 +1,7 @@
 import { Color, GameView } from '@chess-mcp/shared';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { draw } from '../chess/game.ts';
+import { colorName, draw, type Game } from '../chess/game.ts';
 import { changeGame, gameIdInput, gameResult, handle, plyInput, type ToolDeps } from './common.ts';
 
 export function registerDrawOffer(server: McpServer, { store }: ToolDeps) {
@@ -24,7 +24,17 @@ export function registerDrawOffer(server: McpServer, { store }: ToolDeps) {
     ({ gameId, ply, action, color }) =>
       handle(server, store, gameId, async () => {
         const { game, ended } = await changeGame(store, gameId, ply, (g) => draw(g, action, color));
-        return gameResult(game, { ended });
+        return gameResult(game, { ended, note: drawNote(action, color, game) });
       }),
   );
+}
+
+/** What happened, where the board alone doesn't show it. */
+function drawNote(action: 'offer' | 'accept' | 'decline', color: Color, game: Game) {
+  if (action === 'decline') return `${colorName(color)} declined the draw offer.`;
+  // Offering while the other side's offer is pending agrees the draw.
+  if (action === 'offer' && game.status === 'finished') {
+    return 'Both sides offered a draw, so the draw is agreed.';
+  }
+  return undefined;
 }

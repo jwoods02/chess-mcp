@@ -14,6 +14,9 @@ export function registerLegalMoves(server: McpServer, { store }: ToolDeps) {
         gameId: gameIdInput,
         square: z
           .string()
+          .trim()
+          .toLowerCase()
+          .regex(/^[a-h][1-8]$/, 'A square is a file a-h and a rank 1-8, e.g. "g1"')
           .optional()
           .describe('Only moves for the piece on this square, e.g. "g1"'),
       }),

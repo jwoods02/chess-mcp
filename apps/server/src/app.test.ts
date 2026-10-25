@@ -206,6 +206,36 @@ test("asks the model to show the board when a human move leaves a position the h
   expect(result.structuredContent.note).toContain('call get_game to show them the board');
 });
 
+test('legal_moves reads a square loosely, and rejects one that is not on the board', async () => {
+  const { structuredContent } = await callTool('new_game', { white: 'human', black: 'llm' });
+  const { gameId } = structuredContent;
+  const knight = await callTool('legal_moves', { gameId, square: ' G1 ' });
+  expect(knight.content[0]!.text).toBe('Legal moves from g1: Nf3, Nh3');
+  const offBoard = await callTool('legal_moves', { gameId, square: 'z9' });
+  expect(offBoard.isError).toBe(true);
+  expect(offBoard.content[0]!.text).toContain('A square is a file a-h and a rank 1-8');
+});
+
+test('draw and undo results say what happened when the board alone does not', async () => {
+  const { structuredContent } = await callTool('new_game', { white: 'human', black: 'human' });
+  const { gameId } = structuredContent;
+  await callTool('draw_offer', { gameId, ply: 0, action: 'offer', color: 'w' });
+  const declined = await callTool('draw_offer', { gameId, ply: 0, action: 'decline', color: 'b' });
+  expect(declined.structuredContent.note).toBe('Black declined the draw offer.');
+
+  await callTool('submit_human_move', { gameId, ply: 0, move: 'e4' });
+  await callTool('submit_human_move', { gameId, ply: 1, move: 'e5' });
+  const undone = await callTool('undo_move', { gameId, ply: 2, plies: 5 });
+  expect(undone.structuredContent.note).toBe('Took back 2 half-moves, not 5: all there were.');
+
+  await callTool('draw_offer', { gameId, ply: 0, action: 'offer', color: 'w' });
+  const crossed = await callTool('draw_offer', { gameId, ply: 0, action: 'offer', color: 'b' });
+  expect(crossed.structuredContent).toMatchObject({
+    termination: 'draw_agreed',
+    note: 'Both sides offered a draw, so the draw is agreed.',
+  });
+});
+
 test('reports an unknown game', async () => {
   const result = await callTool('get_game', { gameId: 'nope' });
   expect(result).toMatchObject({
@@ -261,8 +291,9 @@ describe('coaching', () => {
   test("analyze_position gives each move of a line its own facts, and says when it's mate", async () => {
     const start = await callTool('new_game', { white: 'human', black: 'llm' });
     const { gameId } = start.structuredContent;
-    const trade = (await callTool('analyze_position', { gameId, moves: ['e4', 'd5', 'exd5'] }))
-      .structuredContent as unknown as { line: MoveFacts[] };
+    const tradeResult = await callTool('analyze_position', { gameId, moves: ['e4', 'd5', 'exd5'] });
+    const trade = tradeResult.structuredContent as unknown as { line: MoveFacts[] };
+    expect(tradeResult.content[0]!.text).toContain('best capture: Qxd5 wins 1 point.');
     // Material after each move itself, not after the move that follows it in the line.
     expect(trade.line.map((m) => [m.move, m.material, m.reply])).toEqual([
       ['e4', 'level', undefined],
@@ -444,6 +475,18 @@ describe('playing Jev', () => {
       server,
     );
     expect(alsoWrong.content[0]!.text).toContain('Error [wrong_tool]');
+  });
+
+  test("undo against Jev says when it stops on the human's turn", async () => {
+    const server = withJev('e5');
+    const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
+    const { gameId } = start.structuredContent;
+    await callTool('play_against_jev', { gameId, ply: 0, move: 'e4' }, server);
+    const undone = await callTool('undo_move', { gameId, ply: 2, plies: 1 }, server);
+    expect(undone.structuredContent).toMatchObject({
+      ply: 0,
+      note: "Took back 2 half-moves, not 1: stopping on the human's turn against Jev.",
+    });
   });
 
   test('Jev moves first when it plays White', async () => {

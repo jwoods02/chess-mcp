@@ -82,11 +82,13 @@ export function factsText(facts: MoveFacts): string {
   const parts = [facts.move];
   if (facts.captured) parts.push(`captured a ${facts.captured}`);
   for (const h of facts.hanging) {
-    parts.push(`${h.piece} on ${h.square} could be won (${h.loses} points)`);
+    parts.push(`${h.piece} on ${h.square} could be won (${points(h.loses)})`);
   }
   if (facts.allowsMate.length) parts.push(`allows mate: ${facts.allowsMate.join(', ')}`);
   if (facts.missedMate.length) parts.push(`missed mate: ${facts.missedMate.join(', ')}`);
-  if (facts.missedWin) parts.push(`missed ${facts.missedWin.move} winning ${facts.missedWin.wins}`);
+  if (facts.missedWin) {
+    parts.push(`missed ${facts.missedWin.move} winning ${points(facts.missedWin.wins)}`);
+  }
   parts.push(`material now: ${facts.material}`);
   if (facts.reply) parts.push(`then the reply ${facts.reply}`);
   return parts.join('; ');
@@ -99,13 +101,17 @@ export function positionText(facts: PositionFacts): string {
   const parts = [`${facts.toMove} to move${facts.inCheck ? ', in check' : ''}`];
   if (facts.mateInOne.length) parts.push(`mate in one: ${facts.mateInOne.join(', ')}`);
   if (facts.bestCapture) {
-    parts.push(`best capture: ${facts.bestCapture.move} wins ${facts.bestCapture.wins} points`);
+    parts.push(`best capture: ${facts.bestCapture.move} wins ${points(facts.bestCapture.wins)}`);
   }
   for (const h of facts.underAttack) {
-    parts.push(`${h.piece} on ${h.square} is under attack (${h.loses} points)`);
+    parts.push(`${h.piece} on ${h.square} is under attack (${points(h.loses)})`);
   }
   if (parts.length === 1) parts.push('no mate in one, winning capture or piece under attack');
   return parts.join('; ');
+}
+
+function points(n: number): string {
+  return `${n} ${n === 1 ? 'point' : 'points'}`;
 }
 
 /** Who played the last move, plus Jev's instinct when it was Jev's move. */

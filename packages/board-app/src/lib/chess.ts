@@ -65,6 +65,17 @@ export function checkedKing(fen: string): string | undefined {
   return chess.findPiece({ type: 'k', color: chess.turn() })[0];
 }
 
+/**
+ * Whether the human can take back their last move: on their turn or after the game, once they've
+ * moved. Before that, the only move to take back is the opponent's first, which it would just play
+ * again. Two plies always include one of the human's, since they hold one of the colours.
+ */
+export function canTakeBack(view: GameView): boolean {
+  const human = view.white === 'human' || view.black === 'human';
+  const humanMoved = view.ply >= 2 || view.lastMove?.by === 'human';
+  return human && humanMoved && (view.toMove === 'human' || view.status === 'finished');
+}
+
 export function playersText(view: GameView): string {
   const name = (player: Player) => ({ human: 'You', llm: 'Assistant', jev: 'Jev' })[player];
   const level = view.opponentLevel === 'best' ? '' : ` · ${view.opponentLevel}`;

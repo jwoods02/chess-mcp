@@ -3,7 +3,7 @@ import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { SHOWS_BOARD } from '../board-ui.ts';
-import { undo } from '../chess/game.ts';
+import { hasJev, undo } from '../chess/game.ts';
 import { playJevReply } from '../opponents/reply.ts';
 import { changeGame, gameIdInput, gameResult, handle, plyInput, type ToolDeps } from './common.ts';
 
@@ -27,10 +27,17 @@ export function registerUndoMove(server: McpServer, { store, jev }: ToolDeps) {
     },
     ({ gameId, ply, plies }) =>
       handle(server, store, gameId, async () => {
-        const { game, ended } = await changeGame(store, gameId, ply, (g) =>
-          playJevReply(undo(g, plies), jev),
-        );
-        return gameResult(game, { ended });
+        let taken = 0;
+        const { game, ended } = await changeGame(store, gameId, ply, (g) => {
+          const undone = undo(g, plies);
+          taken = g.moves.length - undone.moves.length;
+          return playJevReply(undone, jev);
+        });
+        // Say when the count changed, so nobody thinks the position is off by a move.
+        const why = hasJev(game) ? "stopping on the human's turn against Jev" : 'all there were';
+        const note =
+          taken !== plies ? `Took back ${taken} half-moves, not ${plies}: ${why}.` : undefined;
+        return gameResult(game, { ended, note });
       }),
   );
 }

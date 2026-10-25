@@ -137,7 +137,7 @@ repetition, and it's trivially cheap. The current FEN is derived, not stored.
 - `createGame({ white, black, startFen? }) → Game`
 - `applyMove(game, input, by) → Game`: plays a move for the side to move, which must be controlled by
   `by` (otherwise `not_your_turn`). It accepts SAN (`Nf3`), UCI
-  (`g1f3`, `e7e8q`) and loose forms (`nf3`, `0-0`). A lowercase `bx…` is always a pawn capture, never
+  (`g1f3`, `e7e8q`) and loose forms (`nf3`, `0-0`, `e8q`). A lowercase `bx…` is always a pawn capture, never
   a bishop move. Promotions must name the piece. It throws a
   `ChessError` with a `code` on anything illegal, and sets status/result/termination when the game
   ends. Threefold repetition and the 50-move rule end the game automatically, as chess.js does.
@@ -151,7 +151,8 @@ repetition, and it's trivially cheap. The current FEN is derived, not stored.
 - `offer`: `color` offers a draw, which sets `drawOffer`. Allowed any time the game is active.
 - `accept` / `decline`: only the _other_ side can respond, and only while an offer is pending.
   Accepting ends the game `1/2-1/2` (`draw_agreed`). Declining clears the offer. Offering while the
-  opponent's offer is pending counts as accepting it.
+  opponent's offer is pending counts as accepting it. The result's `note` says so, and says when an
+  offer was declined, since the board alone doesn't show either.
 - As in over-the-board chess, a move by the side the offer was made to declines it. The usual flow is
   to make your move, then offer.
 - The server trusts the caller about who is acting. When the human is offering or accepting, the
@@ -306,20 +307,20 @@ line is `GameView.next`, and a note, when there is one, follows it.
 
 ### Tools
 
-| Tool                   | Input                                                              | Shows the board | Notes                                                                        |
-| ---------------------- | ------------------------------------------------------------------ | --------------- | ---------------------------------------------------------------------------- |
-| `new_game`             | `{ white, black, startFen?, coaching?, opponentLevel? }`           | ✅              | Returns a new UUID and the full coaching guidance.                           |
-| `get_game`             | `{ gameId }`                                                       | ✅              | Also how the model shows the board after a human move when needed.           |
-| `make_move`            | `{ gameId, ply, move }`                                            | ✅              | The **assistant's** move. Rejected (`not_your_turn`) if a human is to move.  |
-| `submit_human_move`    | `{ gameId, ply, move }`                                            | –               | Relays a move the **human** made, in games not against Jev.                  |
-| `play_against_jev`     | `{ gameId, ply, move }`                                            | ✅              | The human's move against Jev; Jev replies in the same call. Only with a key. |
-| `legal_moves`          | `{ gameId, square? }`                                              | –               | SAN list, optionally for one piece.                                          |
-| `undo_move`            | `{ gameId, ply, plies?: number }`                                  | ✅              | Default 2 (back to the human's turn). Never stops on Jev's turn.             |
-| `resign_game`          | `{ gameId, ply, color }`                                           | –               | `color` = the side resigning.                                                |
-| `draw_offer`           | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | –               | `color` = the side acting. See [Draw offers](#draw-offers).                  |
-| `update_game_settings` | `{ gameId, ply, coaching?, opponentLevel? }`                       | –               | Changes the coaching mode or opponent level. Returns the full guidance.      |
-| `analyze_position`     | `{ gameId, moves?: string[] }`                                     | –               | Read-only checked facts for the position, or for a line on a scratch copy.   |
-| `show_game_setup`      | `{}`                                                               | ✅              | The new-game card: opponents, coaching modes and levels.                     |
+| Tool                   | Input                                                              | Shows the board | Notes                                                                                                     |
+| ---------------------- | ------------------------------------------------------------------ | --------------- | --------------------------------------------------------------------------------------------------------- |
+| `new_game`             | `{ white, black, startFen?, coaching?, opponentLevel? }`           | ✅              | Returns a new UUID and the full coaching guidance.                                                        |
+| `get_game`             | `{ gameId }`                                                       | ✅              | Also how the model shows the board after a human move when needed.                                        |
+| `make_move`            | `{ gameId, ply, move }`                                            | ✅              | The **assistant's** move. Rejected (`not_your_turn`) if a human is to move.                               |
+| `submit_human_move`    | `{ gameId, ply, move }`                                            | –               | Relays a move the **human** made, in games not against Jev.                                               |
+| `play_against_jev`     | `{ gameId, ply, move }`                                            | ✅              | The human's move against Jev; Jev replies in the same call. Only with a key.                              |
+| `legal_moves`          | `{ gameId, square? }`                                              | –               | SAN list, optionally for one piece.                                                                       |
+| `undo_move`            | `{ gameId, ply, plies?: number }`                                  | ✅              | Default 2 (back to the human's turn). Never stops on Jev's turn; `note` says when that changed the count. |
+| `resign_game`          | `{ gameId, ply, color }`                                           | –               | `color` = the side resigning.                                                                             |
+| `draw_offer`           | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | –               | `color` = the side acting. See [Draw offers](#draw-offers).                                               |
+| `update_game_settings` | `{ gameId, ply, coaching?, opponentLevel? }`                       | –               | Changes the coaching mode or opponent level. Returns the full guidance.                                   |
+| `analyze_position`     | `{ gameId, moves?: string[] }`                                     | –               | Read-only checked facts for the position, or for a line on a scratch copy.                                |
+| `show_game_setup`      | `{}`                                                               | ✅              | The new-game card: opponents, coaching modes and levels.                                                  |
 
 `ply` is the guard described in [Staleness and concurrency](#staleness-and-concurrency-the-ply-guard).
 "Shows the board" means the tool is linked to the board UI (`_meta.ui.resourceUri`). See
@@ -444,6 +445,8 @@ packages/board-app/src/
   5. Server instructions tell the model a board move is already submitted, so it replies rather than
      submitting it again.
 - **Take back** calls `undo_move` (one ply if the human moved last, otherwise two) and tells the model.
+  It's offered once the human has moved (`canTakeBack`): before that, the only move to take back is
+  the opponent's first, which it would just play again.
   Where the host won't run it, the board posts "Please take back my last move." instead.
 - **New game:** `show_game_setup` draws the new-game card (opponent, colour, strength, coaching, with
   each mode's description). Start calls `new_game` from the board and the game appears in the same card;
