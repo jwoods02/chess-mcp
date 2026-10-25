@@ -15,7 +15,8 @@ export function registerUndoMove(server: McpServer, { store, jev }: ToolDeps) {
       title: 'Take back chess moves',
       description:
         'Take back moves in a chess game. The default of 2 takes back the last move and the reply, ' +
-        'returning to the same side to move. Reopens a finished game.',
+        "returning to the same side to move. Against Jev it always stops on the other player's turn. " +
+        'Reopens a finished game.',
       inputSchema: z.object({
         gameId: gameIdInput,
         ply: plyInput,

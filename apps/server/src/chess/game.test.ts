@@ -126,6 +126,14 @@ describe('undo', () => {
   test('fails when there is nothing to take back', () => {
     expect(errorCode(() => undo(newGame(), 2))).toBe('invalid_undo');
   });
+
+  test("against Jev it stops on the human's turn, so Jev doesn't just move again", () => {
+    const vsJev = createGame({ white: 'human', black: 'jev' });
+    // After Jev's reply, taking back one ply goes one further.
+    expect(toView(undo(play(vsJev, 'e4', 'e5'), 1)).ply).toBe(0);
+    // After the human's move (say it ended the game), the default of two stops one short.
+    expect(toView(undo(play(vsJev, 'e4', 'e5', 'Nf3'), 2)).ply).toBe(2);
+  });
 });
 
 describe('resign and draws', () => {

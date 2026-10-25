@@ -109,10 +109,17 @@ export function applyMove(game: Game, input: string, by: Player, meta?: MoveMeta
   return withStatus({ ...game, moves: [...game.moves, move], drawOffer }, chess);
 }
 
-/** Takes back up to `plies` half-moves (fewer if the game is shorter). Reopens a finished game. */
+/**
+ * Takes back up to `plies` half-moves (fewer if the game is shorter). Reopens a finished game.
+ * Against Jev it stops on the other player's turn, since stopping on Jev's would only make Jev move
+ * again: one ply short, or one further when taking back a single ply.
+ */
 export function undo(game: Game, plies: number): Game {
-  const count = Math.min(plies, game.moves.length);
+  let count = Math.min(plies, game.moves.length);
   if (count < 1) throw new ChessError('invalid_undo', 'There are no moves to take back.');
+  if (seat(game, turnAfterUndo(game, count)) === 'jev') {
+    count = count > 1 ? count - 1 : Math.min(2, game.moves.length);
+  }
 
   const reverted: Game = {
     ...game,
@@ -241,6 +248,13 @@ function assertNotJev(game: Game, color: Color) {
       `${colorName(color)} is played by Jev, which decides for itself.`,
     );
   }
+}
+
+/** The side to move once `count` plies are taken back. */
+function turnAfterUndo(game: Game, count: number): Color {
+  const startTurn = game.startFen.split(' ')[1] as Color;
+  const remaining = game.moves.length - count;
+  return remaining % 2 === 0 ? startTurn : startTurn === 'w' ? 'b' : 'w';
 }
 
 function touch(game: Game): Game {
