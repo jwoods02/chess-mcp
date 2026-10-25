@@ -18,7 +18,8 @@ export function registerPlayAgainstJev(server: McpServer, { store, jev }: ToolDe
       title: 'Play a move against Jev',
       description:
         "Submit the human's move in a chess game against Jev. Jev replies straight away and the result " +
-        "shows the board with both moves, along with Jev's top choices, which help when coaching. " +
+        "shows the board with both moves. It also shows Jev's instinct (the moves it rated most likely), " +
+        'which is not an evaluation: Jev is often wrong. ' +
         'Accepts SAN ("Nf3", "O-O", "e8=Q"), UCI ("g1f3", "e7e8q") or loose forms ("nf3", "0-0"). ' +
         'Illegal moves are rejected with the list of legal moves: tell the human and ask again.',
       inputSchema: z.object({

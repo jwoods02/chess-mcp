@@ -213,7 +213,10 @@ code. We'll add columns or tables when a real query needs them.
 - Every result returns **both**:
   - `content`: a complete text response with the board, FEN, moves, last move, status and what
     happens next. A text-only client loses nothing.
-  - `structuredContent`: a `GameView`, which the board UI renders.
+  - `structuredContent`: a `GameView`, which the board UI renders. It also carries the ASCII board,
+    the next step and any note, because some clients show the model only `structuredContent`: Claude
+    Code does this for successful results (errors show the text). Playtests found models there saw no
+    board and no "call make_move with ply N".
 - Rule violations return `isError: true` with a `code`, a message and the current text board, so the
   model can recover in one step.
 - Server `instructions` (sent on `initialize`) tell the model to relay the human's move and play its
@@ -226,7 +229,9 @@ code. We'll add columns or tables when a real query needs them.
 ### GameView
 
 `GameView` is what the **server returns** in every tool result. The model reads it (as text and as
-structured data) and so does the board UI. The model only ever sends tool inputs.
+structured data) and so does the board UI. The model only ever sends tool inputs. It is the game's
+state (`toState(game)` in `chess/game.ts`) plus the text the model needs (`gameView(state, note)` in
+`chess/text.ts`), so the chess logic stays free of presentation.
 
 ```ts
 interface GameView {
@@ -252,6 +257,10 @@ interface GameView {
     jev?: { topMoves: Record<string, number>; fallback?: string }; // when Jev moved
   };
   orientation: Color; // board orientation for the UI: the human's colour
+  // The text the model needs, also in the structured result:
+  board: string; // ASCII board from the human's side
+  next: string; // what should happen next, and which tool to call
+  note?: string; // anything else to act on, e.g. "call get_game to show them the board"
   coaching?: CoachingBlock; // M5: see Coaching modes
 }
 ```
@@ -280,8 +289,9 @@ Status: Black to move. It's your turn (you play Black): call make_move with ply 
 ```
 
 ASCII letters (more reliable for models than Unicode glyphs), flipped when the human plays Black. A
-`Draw offer:` line appears only while an offer is pending, and Jev's moves add its top choices
-("Last move: Bc5 (Jev; its top choices were Bc5 27%, Nxe4 21%…)").
+`Draw offer:` line appears only while an offer is pending, and Jev's moves add its instinct ("Last
+move: Bc5 (Jev; its instinct favoured Bc5 27%, Nxe4 21%…, which is not an evaluation)"). The `Status:`
+line is `GameView.next`, and a note, when there is one, follows it.
 
 ### Tools
 
@@ -456,11 +466,15 @@ TypeSafe's System One API directly. Using the AI SDK keeps the door open to othe
   We take the highest-probability legal move ourselves rather than trusting `choice` alone, in case
   rounded probabilities tie.
 - **What we keep:** Jev's top five moves with probabilities, stored on the move and returned as
-  `GameView.lastMove.jev.topMoves` ("its top choices were Bc5 27%, Nxe4 21%…"). That's the raw material
-  for coaching.
+  `GameView.lastMove.jev.topMoves`, labelled as Jev's instinct ("its instinct favoured Bc5 27%, Nxe4
+  21%…"). Playtest models read the old label, "top choices", as advice or an evaluation; it's neither,
+  and Jev is often wrong. That's raw material for coaching, not a verdict.
 - **Live results (2026-10-25):** 135–300ms per move. It plays human-like openings (1.e4 at 81% from the
   start), takes a hanging queen (63%) and finds a mate in one (69%). Third-party benchmarks still show
   it losing to Stockfish's weakest level, so expect a beginner-to-club sparring partner.
+- **Playtests (2026-10-25):** Jev's worst moves were checks or captures that hung material (Bxf7+,
+  Qf3+, Qxh2+ hanging the queen). Our move descriptions ("…, check", "captures queen") may push it
+  toward those. Worth an A/B test: SAN only vs described moves.
 - **Not built yet:** strength and style control. See
   [Opponent settings](./product/coaching-modes.md#opponent-settings-later-experiments).
 - **Tests** use the AI SDK's `Experimental_DecisionMockModelV4` (`opponents/mock-jev.ts`), so they make no
@@ -549,7 +563,7 @@ interface CoachingBlock {
 | 3   | Game = `startFen + moves`. FEN is derived.                                                          | Needed for repetition detection, and it's a single source of truth.                                     |
 | 4   | `better-sqlite3`, one table, JSON column, no ORM or migrations framework                            | Least code that works. The `GameStore` interface allows swapping later.                                 |
 | 5   | Three packages: `server`, `board-app`, `shared`                                                     | UI is separate, as required. Everything else stays in the server until it needs to move.                |
-| 6   | Every tool returns full text **and** `structuredContent`                                            | Text-only clients are first-class.                                                                      |
+| 6   | Every tool returns full text **and** `structuredContent`, each complete on its own                  | Text-only clients are first-class, and some clients show the model only `structuredContent`.            |
 | 7   | Mutating tools require the `ply` the caller saw; saves are conditional on the loaded game           | `ply` catches stale views; comparing the stored game catches racing writes, including same-ply changes. |
 | 8   | React with `react-chessboard`                                                                       | MIT, inline SVG pieces, drag/drop for the stretch goal.                                                 |
 | 9   | Engine replies are played inside the move call that hands them the turn                             | One call per human move. Simpler for the model and the UI.                                              |

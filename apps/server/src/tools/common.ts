@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { ChessError, toView, type Game } from '../chess/game.ts';
-import { gameText } from '../chess/text.ts';
+import { ChessError, toState, type Game } from '../chess/game.ts';
+import { gameText, gameView } from '../chess/text.ts';
 import type { Opponent } from '../opponents/opponent.ts';
 import type { GameStore } from '../store/store.ts';
 
@@ -21,11 +21,13 @@ export const plyInput = z
     'The `ply` from the latest result for this game. Guards against acting on an old position.',
   );
 
-/** A successful result: the full text board plus the GameView as structured content. */
+/**
+ * A successful result: the text response plus the GameView as structured content. Both carry the
+ * board and the next step, since some clients show the model only one of them.
+ */
 export function gameResult(game: Game, note?: string): CallToolResult {
-  const view = toView(game);
-  const text = note ? `${gameText(view)}\n${note}` : gameText(view);
-  return { content: [{ type: 'text', text }], structuredContent: view };
+  const view = gameView(toState(game), note);
+  return { content: [{ type: 'text', text: gameText(view) }], structuredContent: view };
 }
 
 export async function loadGame(store: GameStore, gameId: string): Promise<Game> {
@@ -63,7 +65,7 @@ export async function handle(
     const message = `Error [${error.code}]: ${error.message}`;
     const game = gameId ? await store.get(gameId) : undefined;
     if (!game) return { isError: true, content: [{ type: 'text', text: message }] };
-    const view = toView(game);
+    const view = gameView(toState(game));
     return {
       isError: true,
       content: [{ type: 'text', text: `${message}\n\nCurrent position:\n${gameText(view)}` }],

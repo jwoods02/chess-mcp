@@ -19,8 +19,10 @@ If a change contradicts the docs, update the docs in the same change (or ask fir
   are `GameStore` (storage) and `Opponent` (Jev and others).
 - **The server is the source of truth for the board.** Every move is validated with chess.js. Never
   trust a move, FEN or game state that comes from the model or the UI without checking it.
-- **Text first.** Every tool returns a complete text response **and** `structuredContent`. The board
-  UI is an enhancement and never a requirement.
+- **Text first.** Every tool returns a complete text response **and** `structuredContent`, and each
+  must be complete on its own: some clients (Claude Code) show the model only `structuredContent`, so
+  anything the model must read (the board, the next step, notes) goes in both. The board UI is an
+  enhancement and never a requirement.
 - **Mutating tools require `ply`**, the caller's last-seen half-move count. If it doesn't match, return
   `stale_state`. Never apply a move against a stale view.
 - **No auth and no deploy** for now. Games are identified only by server-generated UUIDs.

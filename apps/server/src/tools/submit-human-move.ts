@@ -2,7 +2,7 @@ import { GameView } from '@chess-mcp/shared';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { CALLABLE_FROM_BOARD } from '../board-ui.ts';
-import { applyMove, ChessError, hasJev, toView } from '../chess/game.ts';
+import { applyMove, ChessError, hasJev, toState } from '../chess/game.ts';
 import { changeGame, gameIdInput, gameResult, handle, plyInput, type ToolDeps } from './common.ts';
 
 // Doesn't draw a board: the human already knows the move they made, and the assistant's reply
@@ -41,7 +41,7 @@ export function registerSubmitHumanMove(server: McpServer, { store }: ToolDeps) 
         });
         // Only the model sees this result, so if a human has to look at the new position, it should
         // show it.
-        const view = toView(game);
+        const view = toState(game);
         const humanMustSee = view.status === 'finished' || view.toMove === 'human';
         return gameResult(
           game,

@@ -33,8 +33,8 @@ _different kind_ of AI (Jev), or an LLM building a puzzle and then coaching the 
 
 1. **The server is the source of truth.** Every move goes through the server and is validated. Tool
    responses always restate the authoritative position, so the LLM never has to remember the board.
-2. **Text-first, UI-enhanced.** Every tool returns a complete text response. The MCP App board is a
-   progressive enhancement and is never required to play.
+2. **Text-first, UI-enhanced.** Every tool result tells the model everything it needs in plain text,
+   including the board. The MCP App board is a progressive enhancement and is never required to play.
 3. **Stateless calls, stateful games.** Each MCP request is independent. Game state lives in storage
    and is keyed by an ID, so any request, from the model or the UI, can pick up any game.
 4. **Keep it simple.** Write minimal code that humans can read easily. Storage, opponents and

@@ -1,4 +1,4 @@
-import type { Color, GameView, Player, Result, Termination } from '@chess-mcp/shared';
+import type { Color, GameState, Player, Result, Termination } from '@chess-mcp/shared';
 import { Chess, DEFAULT_POSITION, validateFen, type Square } from 'chess.js';
 
 export interface Game {
@@ -172,7 +172,7 @@ export function legalMoves(game: Game, square?: string): string[] {
   return chess.moves({ square: square.toLowerCase() as Square });
 }
 
-export function toView(game: Game): GameView {
+export function toState(game: Game): GameState {
   const chess = replay(game);
   chess.setHeader('White', game.white);
   chess.setHeader('Black', game.black);

@@ -100,6 +100,10 @@ test('plays a game to checkmate through the tools', async () => {
   const start = await callTool('new_game', { white: 'human', black: 'llm' });
   const { gameId } = start.structuredContent;
   expect(start.content[0]!.text).toContain('Waiting for the human');
+  // Some clients (Claude Code) show the model only the structured result, so it carries the board
+  // and the next step too.
+  expect(start.structuredContent.board).toContain('1 │ R N B Q K B N R');
+  expect(start.structuredContent.next).toContain('call submit_human_move with ply 0');
 
   // The human's moves are relayed with submit_human_move; the assistant plays with make_move.
   const moves = ['f3', 'e5', 'g4', 'Qh4#'];
@@ -153,6 +157,7 @@ test("asks the model to show the board when a human move leaves a position the h
   const { gameId } = structuredContent;
   const result = await callTool('submit_human_move', { gameId, ply: 0, move: 'e4' });
   expect(result.content[0]!.text).toContain('call get_game to show them the board');
+  expect(result.structuredContent.note).toContain('call get_game to show them the board');
 });
 
 test('reports an unknown game', async () => {
@@ -190,7 +195,7 @@ describe('playing Jev', () => {
       toMove: 'human',
     });
     expect(result.structuredContent.lastMove).toMatchObject({ san: 'e5', by: 'jev' });
-    expect(result.content[0]!.text).toContain('Last move: e5 (Jev; its top choices were e5 100%');
+    expect(result.content[0]!.text).toContain('Last move: e5 (Jev; its instinct favoured e5 100%');
   });
 
   test("the human's move against Jev has its own tool, which shows the board", async () => {

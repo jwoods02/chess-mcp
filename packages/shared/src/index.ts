@@ -22,8 +22,8 @@ export const Termination = z.enum([
 ]);
 export type Termination = z.infer<typeof Termination>;
 
-/** What every game tool returns as structuredContent. Read by the model and the board UI. */
-export const GameView = z.object({
+/** The game itself, as the server computes it. */
+export const GameState = z.object({
   gameId: z.string(),
   fen: z.string(),
   pgn: z.string(),
@@ -51,7 +51,9 @@ export const GameView = z.object({
         .object({
           topMoves: z
             .record(z.string(), z.number())
-            .describe("Jev's most likely moves (probability)"),
+            .describe(
+              "Jev's instinct: the moves it rated most likely, with probabilities. Not an evaluation of the position; Jev is often wrong.",
+            ),
           fallback: z
             .string()
             .optional()
@@ -61,5 +63,16 @@ export const GameView = z.object({
     })
     .optional(),
   orientation: Color.describe("Board orientation: the human's colour"),
+});
+export type GameState = z.infer<typeof GameState>;
+
+/**
+ * What every game tool returns as structuredContent: the game plus the text the model needs. Some
+ * clients (Claude Code) show the model only structuredContent, so it has to be complete on its own.
+ */
+export const GameView = GameState.extend({
+  board: z.string().describe("ASCII board from the human's side. Uppercase is White."),
+  next: z.string().describe('What should happen next, and which tool to call'),
+  note: z.string().optional().describe('Anything else to act on, e.g. showing the human the board'),
 });
 export type GameView = z.infer<typeof GameView>;

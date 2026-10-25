@@ -1,12 +1,17 @@
-import type { Color, GameView } from '@chess-mcp/shared';
+import type { Color, GameState, GameView } from '@chess-mcp/shared';
 import { colorName, hasJev, moveText, playerName } from './game.ts';
+
+/** Adds the text the model needs to a game's state: the board, what happens next, and any note. */
+export function gameView(state: GameState, note?: string): GameView {
+  return { ...state, board: board(state.fen, state.orientation), next: next(state), note };
+}
 
 /** The full text response for a game: board, FEN, moves, status and what should happen next. */
 export function gameText(view: GameView): string {
   const lines = [
     `Game ${view.gameId} · White: ${playerName(view.white)} · Black: ${playerName(view.black)}`,
     '',
-    board(view.fen, view.orientation),
+    view.board,
     '',
     `FEN: ${view.fen}`,
     `Moves: ${moveText(view.pgn) || '(none yet)'}`,
@@ -14,7 +19,8 @@ export function gameText(view: GameView): string {
   if (view.lastMove)
     lines.push(`Last move: ${view.lastMove.san} (${lastMoveDetail(view.lastMove)})`);
   if (view.drawOffer) lines.push(`Draw offer: ${colorName(view.drawOffer)} has offered a draw.`);
-  lines.push(`Ply: ${view.ply}`, `Status: ${status(view)}`);
+  lines.push(`Ply: ${view.ply}`, `Status: ${view.next}`);
+  if (view.note) lines.push(view.note);
   return lines.join('\n');
 }
 
@@ -37,7 +43,7 @@ export function board(fen: string, orientation: Color): string {
   ].join('\n');
 }
 
-function status(view: GameView): string {
+function next(view: GameState): string {
   if (view.status === 'finished') {
     return `Game over: ${view.result} by ${view.termination?.replace(/_/g, ' ')}.`;
   }
@@ -53,12 +59,12 @@ function status(view: GameView): string {
   return `${side} to move.${check} Waiting for the human: ask for their move, then call ${tool} with ply ${view.ply}.`;
 }
 
-/** Who played the last move, plus Jev's top choices when it was Jev's move. */
-function lastMoveDetail(move: NonNullable<GameView['lastMove']>): string {
+/** Who played the last move, plus Jev's instinct when it was Jev's move. */
+function lastMoveDetail(move: NonNullable<GameState['lastMove']>): string {
   if (!move.jev) return playerName(move.by);
   if (move.jev.fallback) return `Jev was unavailable, so a random legal move was played`;
   const top = Object.entries(move.jev.topMoves)
     .map(([san, p]) => `${san} ${Math.round(p * 100)}%`)
     .join(', ');
-  return top ? `Jev; its top choices were ${top}` : 'Jev';
+  return top ? `Jev; its instinct favoured ${top}, which is not an evaluation` : 'Jev';
 }
