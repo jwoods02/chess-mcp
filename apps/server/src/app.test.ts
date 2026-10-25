@@ -6,9 +6,9 @@ import { BOARD_URI } from './board-ui.ts';
 import { createJev } from './opponents/jev.ts';
 import type { Opponent } from './opponents/opponent.ts';
 import { mockJevModel } from './opponents/mock-jev.ts';
-import { MemoryStore } from './store/memory.ts';
+import { SqliteStore } from './store/sqlite.ts';
 
-const app = createApp({ store: new MemoryStore() });
+const app = createApp({ store: new SqliteStore(':memory:') });
 
 async function rpc(
   method: string,
@@ -102,7 +102,7 @@ test('marks the tools the board calls itself as callable from the board', async 
 });
 
 test('in live board mode only starting or showing a game draws a board', async () => {
-  const live = createApp({ store: new MemoryStore(), boardMode: 'live' });
+  const live = createApp({ store: new SqliteStore(':memory:'), boardMode: 'live' });
   expect((await listTools(live)).showBoard).toEqual(['get_game', 'new_game']);
 
   const read = await rpc('resources/read', { uri: BOARD_URI }, live);
@@ -178,7 +178,7 @@ test('reports an unknown game', async () => {
 
 describe('playing Jev', () => {
   const withJev = (pick?: string) =>
-    createApp({ store: new MemoryStore(), jev: createJev(mockJevModel(pick)) });
+    createApp({ store: new SqliteStore(':memory:'), jev: createJev(mockJevModel(pick)) });
 
   test('Jev is only offered when the server has a TypeSafe key', async () => {
     const seats = async (server: ReturnType<typeof createApp>) => {
@@ -245,7 +245,7 @@ describe('playing Jev', () => {
         throw new Error('Jev is down');
       },
     });
-    const server = createApp({ store: new MemoryStore(), jev: createJev(failing) });
+    const server = createApp({ store: new SqliteStore(':memory:'), jev: createJev(failing) });
     const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
 
     const result = await callTool(
@@ -273,7 +273,7 @@ describe('playing Jev', () => {
 
   test('an illegal answer from Jev falls back to a random legal move', async () => {
     const illegal: Opponent = { chooseMove: async () => ({ move: 'Ke7' }) }; // the king can't move yet
-    const server = createApp({ store: new MemoryStore(), jev: illegal });
+    const server = createApp({ store: new SqliteStore(':memory:'), jev: illegal });
     const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
     const result = await callTool(
       'play_against_jev',
@@ -287,7 +287,7 @@ describe('playing Jev', () => {
   test('a resignation while Jev is thinking is not overwritten', async () => {
     let answer: (move: { move: string }) => void = () => {};
     const slow: Opponent = { chooseMove: () => new Promise((resolve) => (answer = resolve)) };
-    const server = createApp({ store: new MemoryStore(), jev: slow });
+    const server = createApp({ store: new SqliteStore(':memory:'), jev: slow });
     const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
     const { gameId } = start.structuredContent;
 

@@ -1,13 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { applyMove, createGame, resign } from '../chess/game.ts';
-import { MemoryStore } from './memory.ts';
 import { SqliteStore } from './sqlite.ts';
-import type { GameStore } from './store.ts';
 
-describe.each([
-  ['memory', () => new MemoryStore()],
-  ['sqlite', () => new SqliteStore(':memory:')],
-])('%s store', (_name, makeStore: () => GameStore) => {
+const makeStore = () => new SqliteStore(':memory:');
+
+describe('sqlite store', () => {
   test('creates and loads a game', async () => {
     const store = makeStore();
     const game = createGame({ white: 'human', black: 'llm' });
