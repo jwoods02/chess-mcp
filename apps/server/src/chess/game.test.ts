@@ -54,6 +54,13 @@ describe('applyMove', () => {
     expect(toView(game).moves).toEqual(['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'O-O']);
   });
 
+  test('reads "bxc3" as a pawn capture, never as a bishop move', () => {
+    // No pawn can take on c3 here, but the bishop on b4 can.
+    const game = newGame('rnbqk1nr/pppp1ppp/8/4p3/1b2P3/2N5/PPPP1PPP/R1BQKBNR w KQkq - 2 3');
+    expect(errorCode(() => play(game, 'a3', 'bxc3'))).toBe('illegal_move');
+    expect(toView(play(game, 'a3', 'Bxc3')).lastMove?.san).toBe('Bxc3');
+  });
+
   test('records who played each move', () => {
     const view = toView(play(newGame(), 'e4', 'e5'));
     expect(view.lastMove).toEqual({ san: 'e5', from: 'e7', to: 'e5', by: 'llm' });

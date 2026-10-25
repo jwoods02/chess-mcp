@@ -289,7 +289,8 @@ function tryMove(chess: Chess, input: string) {
     : [
         input,
         input.replace(/0/g, 'O').replace(/o/g, 'O'), // 0-0, o-o → O-O
-        input.charAt(0).toUpperCase() + input.slice(1), // nf3 → Nf3
+        // nf3 → Nf3, but bxc3 is a pawn capture: never turn it into a bishop move.
+        ...(input.startsWith('bx') ? [] : [input.charAt(0).toUpperCase() + input.slice(1)]),
       ];
   for (const candidate of candidates) {
     try {
