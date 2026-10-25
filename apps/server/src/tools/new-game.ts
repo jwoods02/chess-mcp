@@ -25,7 +25,8 @@ export function registerNewGame(server: McpServer, { store, jev }: ToolDeps) {
         players +
         'The server enforces the rules and stores the game, so read the position from the latest ' +
         'tool result; a board you track yourself drifts. ' +
-        'Ask the human how much coaching they want and how strong an opponent, unless they said.',
+        'Ask the human how much coaching they want and how strong an opponent, unless they said: ' +
+        'show_game_setup shows these choices on the board.',
       inputSchema: z.object({
         white: seat.describe('Who plays White'),
         black: seat.describe('Who plays Black'),

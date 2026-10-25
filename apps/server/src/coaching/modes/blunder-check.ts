@@ -6,6 +6,7 @@ const MIN_LOSS = 2;
 export const blunderCheck: CoachingMode = {
   id: 'blunder_check',
   version: 2,
+  label: 'Blunder check',
   description:
     'Quiet unless a move loses material or misses or allows a mate in one; then the coach explains ' +
     'and offers a takeback.',

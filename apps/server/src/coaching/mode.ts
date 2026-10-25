@@ -10,7 +10,9 @@ export interface CoachingMode {
   id: string;
   /** Bump when the wording changes, so games record which version they were coached with. */
   version: number;
-  /** For tool descriptions and, later, the setup screen. */
+  /** How the human sees it, e.g. on the setup card: "Blunder check". */
+  label: string;
+  /** For tool descriptions and the setup card. */
   description: string;
   summary: string;
   guidance: string;

@@ -1,4 +1,4 @@
-import type { GameView, MoveFacts, PositionFacts } from '@chess-mcp/shared';
+import type { GameSetup, GameView, MoveFacts, PositionFacts } from '@chess-mcp/shared';
 import { Experimental_DecisionMockModelV4 as MockDecisionModel } from 'ai/test';
 import { describe, expect, test } from 'vitest';
 import { createApp } from './app.ts';
@@ -83,11 +83,18 @@ test('lists the game tools, showing the board only when a human needs to see a n
     'make_move',
     'new_game',
     'resign_game',
+    'show_game_setup',
     'submit_human_move',
     'undo_move',
     'update_game_settings',
   ]);
-  expect(tools.showBoard).toEqual(['get_game', 'make_move', 'new_game', 'undo_move']);
+  expect(tools.showBoard).toEqual([
+    'get_game',
+    'make_move',
+    'new_game',
+    'show_game_setup',
+    'undo_move',
+  ]);
 });
 
 test('marks submit_human_move as callable from the board, without drawing one', async () => {
@@ -205,6 +212,33 @@ test('reports an unknown game', async () => {
     isError: true,
     content: [{ text: 'Error [game_not_found]: No game with ID nope.' }],
   });
+});
+
+test('shows the new-game options, and a play_chess prompt to start from', async () => {
+  const shown = (await callTool('show_game_setup', {})) as unknown as {
+    structuredContent: GameSetup;
+  };
+  expect(shown.structuredContent.setup).toMatchObject({
+    opponents: ['llm'],
+    coaching: [{ id: 'play', label: 'Just play' }, { id: 'blunder_check' }, { id: 'hints' }],
+    levels: [{ id: 'beginner', rating: 400 }, { id: 'casual' }, { id: 'club' }, { id: 'best' }],
+  });
+
+  const { result: prompts } = await rpc('prompts/list');
+  expect(prompts.prompts.map((p: { name: string }) => p.name)).toEqual(['play_chess']);
+  const { result: partial } = await rpc('prompts/get', {
+    name: 'play_chess',
+    arguments: { color: 'black' },
+  });
+  expect(partial.messages[0].content.text).toContain('as Black');
+  expect(partial.messages[0].content.text).toContain('show_game_setup');
+  const { result: full } = await rpc('prompts/get', {
+    name: 'play_chess',
+    arguments: { opponent: 'assistant', color: 'white', coaching: 'hints', level: 'casual' },
+  });
+  expect(full.messages[0].content.text).toBe(
+    'Let\'s play chess against you, as White, with the opponent at casual player strength, with "Hints" coaching. Start the game with new_game.',
+  );
 });
 
 describe('coaching', () => {

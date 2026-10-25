@@ -3,6 +3,7 @@ import type { CoachingMode } from '../mode.ts';
 export const play: CoachingMode = {
   id: 'play',
   version: 1,
+  label: 'Just play',
   description: 'Just play. The coach stays quiet unless the human asks.',
   summary: 'play: just play. Talk about the position or point out mistakes only if the human asks.',
   guidance:

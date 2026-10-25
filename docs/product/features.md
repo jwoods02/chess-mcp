@@ -40,8 +40,10 @@ The foundation: a human and an agent can play a complete, legal game of chess ov
 - **Live board experiment (removed):** one board per game that updated in place by polling the server.
   It added a hidden tool, polling and a second code path through every move tool, so we dropped it
   in favour of one board per round (see [moving pieces on the board](../mcp-apps-hosts.md)).
-- **Later:** click-to-move and legal-move dots, and a setup screen for starting a new game (opponent,
-  colour, coaching mode, opponent strength).
+- **Board chrome (built):** move history (back, forward, arrow keys), Take back, and New game, which
+  opens the new-game card (opponent, colour, strength, coaching). A `play_chess` prompt starts a game
+  from the client's slash commands.
+- **Later:** click-to-move and legal-move dots, and hint arrows on the board.
 
 ## M3 — Opponents: Jev (play built; coaching next)
 
@@ -90,7 +92,7 @@ puzzles reuse it (`puzzle_coach`) and a new-game screen needs modes to offer. Se
 - Step 2 (built): `analyze_position`, a proactive `hints` mode, and a review offer at the end of every
   game. Next candidates: `socratic`, `commentary`, `plan_first`, each only if it changes what the coach
   does unprompted.
-- Then a new-game setup screen (opponent, colour, coaching mode) and MCP prompts per mode.
+- New-game setup card and a `play_chess` prompt (built).
 
 ## Later / ideas
 

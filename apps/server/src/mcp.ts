@@ -1,6 +1,7 @@
 import { EXTENSION_ID, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer } from '@modelcontextprotocol/server';
 import { registerBoardUi } from './board-ui.ts';
+import { registerPrompts } from './prompts.ts';
 import { registerAnalyzePosition } from './tools/analyze-position.ts';
 import type { Opponent } from './opponents/opponent.ts';
 import type { GameStore } from './store/store.ts';
@@ -12,6 +13,7 @@ import { registerMakeMove } from './tools/make-move.ts';
 import { registerNewGame } from './tools/new-game.ts';
 import { registerPlayAgainstJev } from './tools/play-against-jev.ts';
 import { registerResignGame } from './tools/resign-game.ts';
+import { registerShowGameSetup } from './tools/show-game-setup.ts';
 import { registerSubmitHumanMove } from './tools/submit-human-move.ts';
 import { registerUndoMove } from './tools/undo-move.ts';
 import { registerUpdateGameSettings } from './tools/update-game-settings.ts';
@@ -49,6 +51,7 @@ export function buildMcpServer({ store, jev }: ServerOptions) {
   const deps: ToolDeps = { store, jev };
 
   registerBoardUi(server);
+  registerShowGameSetup(server, deps);
   registerNewGame(server, deps);
   registerGetGame(server, deps);
   registerMakeMove(server, deps);
@@ -60,6 +63,7 @@ export function buildMcpServer({ store, jev }: ServerOptions) {
   registerResignGame(server, deps);
   registerDrawOffer(server, deps);
   registerUpdateGameSettings(server, deps);
+  registerPrompts(server, deps);
 
   return server;
 }

@@ -1,0 +1,29 @@
+.setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: var(--board-max-width);
+  margin: 0 auto;
+  padding: var(--space-1) 0;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.notice {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-text-xs-size);
+}
+
+.danger {
+  color: var(--color-text-danger);
+}

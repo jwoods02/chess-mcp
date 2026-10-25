@@ -1,0 +1,8 @@
+/* Shaped like the board, so nothing jumps when it arrives. */
+.skeleton {
+  max-width: var(--board-max-width);
+  margin: 0 auto;
+  aspect-ratio: 1;
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+}

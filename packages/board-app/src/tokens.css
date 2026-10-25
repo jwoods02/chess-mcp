@@ -1,0 +1,51 @@
+/*
+ * The host passes its theme as CSS variables (applied by useHostStyles), so the board looks native in
+ * Claude, ChatGPT and others. The values here are fallbacks for hosts that don't, matching Claude's.
+ * Spacing and control sizes aren't host tokens, so they're a small rem scale of our own.
+ */
+:root {
+  color-scheme: light dark;
+
+  --color-background-primary: light-dark(#ffffff, #30302e);
+  --color-background-secondary: light-dark(#f5f4ed, #262624);
+  --color-text-primary: light-dark(#141413, #faf9f5);
+  --color-text-secondary: light-dark(#3d3d3a, #c2c0b6);
+  --color-text-tertiary: light-dark(#73726c, #9c9a92);
+  --color-text-danger: light-dark(#7f2c28, #ee8884);
+  --color-text-disabled: light-dark(rgb(20 20 19 / 50%), rgb(250 249 245 / 50%));
+  --color-border-secondary: light-dark(rgb(31 30 29 / 30%), rgb(222 220 209 / 30%));
+  --color-ring-primary: light-dark(rgb(20 20 19 / 70%), rgb(250 249 245 / 70%));
+  --font-sans: system-ui, sans-serif;
+  --font-text-xs-size: 0.75rem;
+  --font-text-sm-size: 0.875rem;
+  --font-text-sm-line-height: 1.4;
+  --font-weight-medium: 500;
+  --border-width-regular: 0.5px;
+  --border-radius-sm: 0.375rem;
+  --border-radius-md: 0.5rem;
+  --border-radius-full: 9999px;
+  --shadow-hairline: 0 1px 2px 0 rgb(0 0 0 / 5%);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --control-height: 2.25rem;
+  --board-max-width: 30rem;
+}
+
+/* Fingers need bigger targets (44pt, per the host's design guidelines). */
+@media (pointer: coarse) {
+  :root {
+    --control-height: 2.75rem;
+  }
+}
+
+body {
+  margin: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-text-sm-size);
+  line-height: var(--font-text-sm-line-height);
+}

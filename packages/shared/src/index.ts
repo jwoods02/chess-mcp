@@ -128,6 +128,7 @@ export type KeyMoment = z.infer<typeof KeyMoment>;
 /** How to coach right now: a one-line summary always, full guidance only at key moments. */
 export const CoachingBlock = z.object({
   mode: z.string(),
+  label: z.string().describe('The mode as the human sees it, e.g. "Blunder check"'),
   summary: z.string().describe('The coaching mode in one line. Follow it.'),
   guidance: z.string().optional().describe('Full instructions, sent at key moments'),
   speak: z.boolean().describe('The coach has something to say now'),
@@ -156,3 +157,15 @@ export const GameView = GameState.extend({
   coaching: CoachingBlock,
 });
 export type GameView = z.infer<typeof GameView>;
+
+/** The choices for a new game, as the setup card shows them. */
+export const GameSetup = z.object({
+  setup: z.object({
+    opponents: z
+      .array(Player)
+      .describe('Who the human can play: "llm" (you) and, when this server has it, "jev"'),
+    coaching: z.array(z.object({ id: z.string(), label: z.string(), description: z.string() })),
+    levels: z.array(z.object({ id: Level, label: z.string(), rating: z.number().optional() })),
+  }),
+});
+export type GameSetup = z.infer<typeof GameSetup>;

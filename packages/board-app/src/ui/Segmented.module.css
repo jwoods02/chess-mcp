@@ -1,0 +1,32 @@
+/* Visible options rather than a dropdown, which the host can clip. */
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+}
+
+.option {
+  flex: 1;
+  min-height: calc(var(--control-height) - 4px);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.option[aria-pressed='true'] {
+  background: var(--color-background-primary);
+  box-shadow: var(--shadow-hairline);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--color-ring-primary);
+}

@@ -1,0 +1,43 @@
+.button {
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: var(--border-width-regular) solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The text and background colours swapped: a pair every host sets, so it always contrasts. */
+.primary {
+  border-color: transparent;
+  background: var(--color-text-primary);
+  color: var(--color-background-primary);
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  padding: 0;
+  border: none;
+  color: var(--color-text-secondary);
+}
+
+.button:hover:not(:disabled, .primary) {
+  background: var(--color-background-secondary);
+}
+
+.button:disabled {
+  color: var(--color-text-disabled);
+  cursor: default;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-ring-primary);
+  outline-offset: 1px;
+}

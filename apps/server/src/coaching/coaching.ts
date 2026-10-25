@@ -47,6 +47,7 @@ export function coachingBlock(
   const full = fullGuidance || reason !== undefined || game.status === 'finished';
   return {
     mode: `${mode.id}@${mode.version}`,
+    label: mode.label,
     summary: mode.summary,
     ...(full && { guidance: mode.guidance }),
     speak: reason !== undefined,

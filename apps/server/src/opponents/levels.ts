@@ -32,7 +32,7 @@ export const LEVELS: Record<Level, LevelSettings> = {
       'play solidly and watch for one-move tactics, but misjudge plans and miss deeper combinations.',
     jev: { topN: 3, temperature: 1 },
   },
-  best: { label: 'strongest', persona: 'play your best.', jev: { topN: 1, temperature: 1 } },
+  best: { label: 'full strength', persona: 'play your best.', jev: { topN: 1, temperature: 1 } },
 };
 
 /** What the LLM is told on its move, e.g. "Play as a beginner (about 400): …". Empty at `best`. */

@@ -6,6 +6,7 @@ const MIN_POINTS = 2;
 export const hints: CoachingMode = {
   id: 'hints',
   version: 1,
+  label: 'Hints',
   description:
     'When the human has a chance or a threat to deal with, the coach nudges them with a hint ' +
     'before they move, starting vague and getting more specific if they ask.',

@@ -318,6 +318,7 @@ line is `GameView.next`, and a note, when there is one, follows it.
 | `draw_offer`           | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | –               | `color` = the side acting. See [Draw offers](#draw-offers).                  |
 | `update_game_settings` | `{ gameId, ply, coaching?, opponentLevel? }`                       | –               | Changes the coaching mode or opponent level. Returns the full guidance.      |
 | `analyze_position`     | `{ gameId, moves?: string[] }`                                     | –               | Read-only checked facts for the position, or for a line on a scratch copy.   |
+| `show_game_setup`      | `{}`                                                               | ✅              | The new-game card: opponents, coaching modes and levels.                     |
 
 `ply` is the guard described in [Staleness and concurrency](#staleness-and-concurrency-the-ply-guard).
 "Shows the board" means the tool is linked to the board UI (`_meta.ui.resourceUri`). See
@@ -407,11 +408,28 @@ config.
 ### UI side
 
 ```
-App connects → ontoolresult(result) → render(result.structuredContent as GameView)
+App connects → ontoolresult(result) → a GameView renders the game; { setup } renders the new-game card
 ```
 
-- **M2 (display):** a board from `fen` in `orientation`, highlights for the last move and check, and a
-  result line once the game is over. No move list or turn text: the chat already says those. It follows the host light/dark theme.
+```
+packages/board-app/src/
+├─ App.tsx              which screen: game or new-game card
+├─ tokens.css           host style variables with fallbacks, plus a small rem spacing scale
+├─ lib/                 host.ts (tool calls, chat messages, fallbacks), chess.ts (pure helpers)
+├─ game/                Game, Board, PromotionPicker, HistoryNav; useHistory, useGameActions
+├─ setup/               Setup (the new-game card), useStartGame
+└─ ui/                  Button, IconButton, Icon, Segmented, Field
+```
+
+- **Styling:** each component has a CSS module beside it, built on the host's variables (colours, type,
+  radii, borders) so the board looks native in each host, following Claude's MCP Apps design
+  guidelines: transparent background, visible segmented controls rather than menus, at most two actions
+  per card, 44pt touch targets on touch screens. No component library: shadcn and similar bring their
+  own tokens, which the host's would fight.
+- **The game:** who's playing and the coaching mode above the board; below it, the move history
+  (first, back, forward, latest, or the arrow keys, all local to the board) and two actions, Take back
+  and New game; then one status line for whose move it is or what just happened. While looking back the
+  board can't be dragged.
 - **Moving on the board (built):**
   1. Only the human's pieces can be dragged, and only on their turn. A dropped piece shows on its new
      square straight away while the server checks it.
@@ -424,6 +442,15 @@ App connects → ontoolresult(result) → render(result.structuredContent as Gam
      `make_move`. If the host refuses the message, the board asks the human to tell the assistant.
   5. Server instructions tell the model a board move is already submitted, so it replies rather than
      submitting it again.
+- **Take back** calls `undo_move` (one ply if the human moved last, otherwise two) and tells the model.
+  Where the host won't run it, the board posts "Please take back my last move." instead.
+- **New game:** `show_game_setup` draws the new-game card (opponent, colour, strength, coaching, with
+  each mode's description). Start calls `new_game` from the board and the game appears in the same card;
+  where the host won't run it, the board posts the choice in the chat ("Let's start a new chess game: I
+  play White against Jev at beginner level, …") for the assistant to start. The New game button opens
+  the same card from a game, with Back to return.
+- **Prompts:** `play_chess` (optional opponent, colour, coaching, level) shows up as a slash command in
+  clients like Claude Code. With every option it asks for `new_game`; otherwise for the setup card.
 - **Host differences:** hosts vary in whether they forward a board's tool calls and whether they send
   or only draft its chat messages. The board tries each path and falls back. See
   [Moving pieces on the board](./mcp-apps-hosts.md) for what Claude and ChatGPT do and why.
