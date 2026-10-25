@@ -13,6 +13,7 @@
   "dependencies": {
     "@chess-mcp/shared": "workspace:*",
     "@modelcontextprotocol/ext-apps": "catalog:",
+    "chess.js": "catalog:",
     "react": "catalog:",
     "react-chessboard": "catalog:",
     "react-dom": "catalog:"

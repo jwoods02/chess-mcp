@@ -8,6 +8,12 @@
       "port": 3000
     },
     {
+      "name": "server-live",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:live"],
+      "port": 3000
+    },
+    {
       "name": "inspector",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["inspect"],

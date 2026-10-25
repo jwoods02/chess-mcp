@@ -6,8 +6,8 @@ import { MemoryStore } from './store/memory.ts';
 
 const app = createApp(new MemoryStore());
 
-async function rpc(method: string, params: object = {}) {
-  const res = await app.request('/mcp', {
+async function rpc(method: string, params: object = {}, server = app) {
+  const res = await server.request('/mcp', {
     method: 'POST',
     headers: {
       host: 'localhost:3000',
@@ -42,14 +42,34 @@ test('tells the model how to talk about the game', async () => {
     capabilities: {},
     clientInfo: { name: 'test', version: '0' },
   });
+  expect(result.capabilities.extensions['io.modelcontextprotocol/ui']).toEqual({
+    mimeTypes: ['text/html;profile=mcp-app'],
+  });
   expect(result.instructions).toContain('same turn');
   expect(result.instructions).toContain('leave them out of your reply');
 });
 
+type ToolInfo = { name: string; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } };
+
+/** Tools the model sees (not app-only), and which of those draw the board. */
+async function listTools(server = app) {
+  const { result } = await rpc('tools/list', {}, server);
+  const forModel = (result.tools as ToolInfo[]).filter(
+    (t) => !t._meta?.ui?.visibility?.every((v) => v === 'app'),
+  );
+  return {
+    all: result.tools as ToolInfo[],
+    names: forModel.map((t) => t.name).sort(),
+    showBoard: forModel
+      .filter((t) => t._meta?.ui?.resourceUri === BOARD_URI)
+      .map((t) => t.name)
+      .sort(),
+  };
+}
+
 test('lists the game tools, showing the board only when a human needs to see a new position', async () => {
-  const { result } = await rpc('tools/list');
-  const tools = Object.fromEntries(result.tools.map((t: { name: string }) => [t.name, t]));
-  expect(Object.keys(tools).sort()).toEqual([
+  const tools = await listTools();
+  expect(tools.names).toEqual([
     'draw_offer',
     'get_game',
     'legal_moves',
@@ -59,10 +79,26 @@ test('lists the game tools, showing the board only when a human needs to see a n
     'submit_human_move',
     'undo_move',
   ]);
-  const showsBoard = Object.keys(tools).filter(
-    (name) => tools[name]._meta?.ui?.resourceUri === BOARD_URI,
-  );
-  expect(showsBoard.sort()).toEqual(['get_game', 'make_move', 'new_game', 'undo_move']);
+  expect(tools.showBoard).toEqual(['get_game', 'make_move', 'new_game', 'undo_move']);
+  // The board UI polls board_state; the model never sees it.
+  expect(tools.all.find((t) => t.name === 'board_state')?._meta?.ui?.visibility).toEqual(['app']);
+});
+
+test('marks the tools the board calls itself as callable from the board', async () => {
+  // Hosts refuse board-initiated calls to tools without `_meta.ui` allowing the app.
+  const { all } = await listTools();
+  for (const name of ['submit_human_move', 'board_state']) {
+    expect(all.find((t) => t.name === name)?._meta?.ui?.visibility).toContain('app');
+  }
+  expect(all.find((t) => t.name === 'submit_human_move')?._meta?.ui?.resourceUri).toBeUndefined();
+});
+
+test('in live board mode only starting or showing a game draws a board', async () => {
+  const live = createApp(new MemoryStore(), 'live');
+  expect((await listTools(live)).showBoard).toEqual(['get_game', 'new_game']);
+
+  const read = await rpc('resources/read', { uri: BOARD_URI }, live);
+  expect(read.result.contents[0].text).toContain('<meta name="chess-board-mode" content="live" />');
 });
 
 test('plays a game to checkmate through the tools', async () => {

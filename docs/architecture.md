@@ -65,6 +65,7 @@ chess-mcp/
 ```bash
 pnpm install
 pnpm dev          # builds the board UI in watch mode + runs the server on http://localhost:3000/mcp
+pnpm dev:live     # the same, with the live board experiment (BOARD_MODE=live)
 ```
 
 - SQLite file at `apps/server/data/chess.db` (created on first run; override with `DATABASE_PATH`).
@@ -367,27 +368,38 @@ App connects → ontoolresult(result) → render(result.structuredContent as Gam
 
 - **M2 (display):** a board from `fen` in `orientation`, highlights for the last move and check, and a
   result line once the game is over. No move list or turn text: the chat already says those. It follows the host light/dark theme.
-- **Stretch (human moves on the board):**
-  1. Drop a piece → `app.callServerTool({ name: 'submit_human_move', arguments: { gameId, ply, move } })`.
-  2. Re-render from the returned view. If Jev replied, that move is already in it.
-  3. Tell the model:
-     - If the LLM is next to move → `app.sendMessage("I played Nf3")`. The model then calls
-       `make_move` for its reply, and the host renders that result.
-     - Otherwise (Jev replied, or there's no LLM seat) → `app.updateModelContext(...)` with the new
-       position, so the model stays informed without being forced to reply.
-  4. On `stale_state`, re-render from the view returned with the error.
-- A promotion picker is needed for the stretch goal (`react-chessboard` handles the drag, we pick the
-  piece).
-- **Stretch experiment: one live board per game.** Instead of a board per round, the board drawn by
-  `new_game` (or `get_game`) stays live for the whole game:
-  - Neither move tool is board-linked. The human moves by dragging; the app submits the move itself,
-    then `sendMessage`s the model when it's the assistant's turn.
-  - The board learns about the assistant's reply by polling an app-only `get_game` (tool
-    `visibility: ['app']`, hidden from the model).
-  - Optionally it asks the host for `pip` display mode so it floats while the chat scrolls.
-  - Board-linking is fixed per tool, so both modes can't run at once. Put it behind a server setting
-    (`BOARD_MODE=per-round|live`) and compare how each feels before choosing.
-  - Risks: host support for `sendMessage` and `pip` varies, and an inline board scrolls out of view.
+- **Moving on the board (built):**
+  1. Only the human's pieces can be dragged, and only on their turn. A dropped piece shows on its new
+     square straight away while the server checks it.
+  2. A pawn dropped on the last rank opens a promotion picker (queen, rook, bishop, knight).
+  3. The app calls `submit_human_move` itself and re-renders from the returned view. If the move is
+     illegal or stale, the board goes back to the server's position and says why.
+  4. The model didn't see that call, so the app tells it: `updateModelContext` with the full result
+     text, then, if the assistant is next, `sendMessage("I played e4.")` so it replies with
+     `make_move`. If the host refuses the message, the board asks the human to tell the assistant.
+  5. Server instructions tell the model a board move is already submitted, so it replies rather than
+     submitting it again.
+- **Board modes** (`BOARD_MODE`, default `per-round`; `pnpm dev:live` runs `live`):
+
+  |                          | `per-round` (default)                         | `live` (experiment)                               |
+  | ------------------------ | --------------------------------------------- | ------------------------------------------------- |
+  | Boards in the chat       | One per round (drawn by the assistant's move) | One per game (drawn by `new_game` / `get_game`)   |
+  | `make_move`, `undo_move` | Draw a board                                  | Text only                                         |
+  | Assistant's reply        | Arrives on a new board                        | The existing board polls `board_state` every 1.5s |
+  | Moves typed in chat      | Next board shows them                         | Picked up by polling                              |
+  - `board_state` is an app-only tool (`visibility: ['app']`), so the model never sees it.
+  - The server tells the board its mode with a `<meta name="chess-board-mode">` tag added when it
+    serves the HTML. The board only polls in live mode, and only while the game is active.
+  - Why polling: MCP Apps only sends a board the results of tool calls that board caused, and the
+    server is stateless, so an existing board can't be told about the assistant's move. If live mode
+    wins, switch to long-polling (`board_state` waits for the ply to change) before hosting.
+  - Not built yet: `pip` display mode, so a live board floats while the chat scrolls.
+
+- **Host differences:** hosts vary in whether they forward a board's tool calls and whether they send
+  or only draft its chat messages. The board tries each path and falls back. See
+  [Moving pieces on the board](./mcp-apps-hosts.md) for what Claude and ChatGPT do and why.
+- **Text-only clients** never see the board, so none of this changes anything for them: every tool
+  still returns the full text board and next step.
 
 ## Opponents (M3)
 
@@ -482,7 +494,7 @@ interface CoachingBlock {
 
 ## Tooling
 
-- Root scripts: `pnpm dev | build | typecheck | test | lint | format`.
+- Root scripts: `pnpm dev | dev:live | build | typecheck | test | lint | format | inspect`.
 - `tsconfig.base.json`: `strict`, `module: nodenext`, `verbatimModuleSyntax`, `erasableSyntaxOnly`,
   `rewriteRelativeImportExtensions` (source imports use `.ts` and run directly in Node).
 - Env (`PORT`, `DATABASE_PATH`, `JEV_*`) is read once in `index.ts`.

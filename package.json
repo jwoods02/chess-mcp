@@ -11,7 +11,8 @@
     "test": "vitest run",
     "lint": "oxlint --type-aware",
     "format": "oxfmt",
-    "inspect": "mcp-inspector --web --transport http --server-url http://localhost:3000/mcp"
+    "inspect": "mcp-inspector --web --transport http --server-url http://localhost:3000/mcp",
+    "dev:live": "BOARD_MODE=live pnpm dev"
   },
   "devDependencies": {
     "@modelcontextprotocol/inspector": "catalog:",

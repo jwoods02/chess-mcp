@@ -1,13 +1,19 @@
 import { GameView } from '@chess-mcp/shared';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { CALLABLE_FROM_BOARD } from '../board-ui.ts';
 import { applyMove, toView } from '../chess/game.ts';
 import type { GameStore } from '../store/store.ts';
 import { changeGame, gameIdInput, gameResult, handle, plyInput } from './common.ts';
 
-// Deliberately not linked to the board UI: the human already knows the move they made, so
-// showing the board again would just repeat it. The board appears with the reply instead.
-export function registerSubmitHumanMove(server: McpServer, store: GameStore) {
+// Doesn't draw a board: the human already knows the move they made, so showing the board again would
+// just repeat it. The board appears with the reply instead. The board itself calls this when the
+// human drags a piece, so it's marked as callable from the board.
+export function registerSubmitHumanMove(
+  server: McpServer,
+  store: GameStore,
+  movesShowBoard: boolean,
+) {
   server.registerTool(
     'submit_human_move',
     {
@@ -23,13 +29,16 @@ export function registerSubmitHumanMove(server: McpServer, store: GameStore) {
         move: z.string().describe("The human's move in SAN or UCI"),
       }),
       outputSchema: GameView,
+      _meta: CALLABLE_FROM_BOARD,
     },
     ({ gameId, ply, move }) =>
       handle(store, gameId, async () => {
         const game = await changeGame(store, gameId, ply, (g) => applyMove(g, move, 'human'));
-        // Only you see this result, so if a human has to look at the new position, show it.
+        // Only the model sees this result, so if a human has to look at the new position, it should
+        // show it. Not needed in live mode, where the board updates itself.
         const view = toView(game);
-        const humanMustSee = view.status === 'finished' || view.toMove === 'human';
+        const humanMustSee =
+          movesShowBoard && (view.status === 'finished' || view.toMove === 'human');
         return gameResult(
           game,
           humanMustSee

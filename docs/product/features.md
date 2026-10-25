@@ -34,12 +34,12 @@ The foundation: a human and an agent can play a complete, legal game of chess ov
 - Highlights for the last move and for check. The board is oriented to the human's colour.
 - A result line when the game ends. Moves and whose turn it is stay in the chat, not the board.
 - Follows the host theme (light/dark).
-- **Stretch:** the human moves by drag/drop or click-click on the board. The move goes straight to the
-  server and the agent is told about it (see [architecture § MCP App](../architecture.md#mcp-app-board-ui)).
-- **Stretch experiment:** one live board per game instead of one per round. The board updates in place
-  for your moves and the assistant's replies, and may float while the chat scrolls. Try it behind a
-  setting and compare how each feels (see [architecture § When the board is shown](../architecture.md#when-the-board-is-shown)).
-  This includes a promotion picker and showing legal-move dots.
+- **Moving on the board (built):** drag your pieces on your turn, with a promotion picker. The move
+  goes straight to the server and the assistant is told, so it replies (see
+  [architecture § MCP App](../architecture.md#mcp-app-board-ui)).
+- **Live board experiment (built, behind `BOARD_MODE=live`):** one board per game that updates in place
+  for your moves and the assistant's replies. Compare it with the default board-per-round.
+- **Later:** click-to-move and legal-move dots, and a floating (picture-in-picture) live board.
 
 ## M3 — Opponents: Jev
 

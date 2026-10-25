@@ -39,6 +39,8 @@ docs/               product and architecture docs
 ```bash
 pnpm install
 pnpm dev            # board UI in watch mode + server on http://localhost:3000/mcp
+pnpm dev:live       # same, with the live board experiment (BOARD_MODE=live)
+pnpm inspect        # MCP Inspector pointed at the local server
 pnpm test           # vitest (all packages)
 pnpm typecheck      # tsc (TypeScript 7) in every package
 pnpm lint           # oxlint (type-aware)
