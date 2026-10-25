@@ -4,8 +4,8 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { SHOWS_BOARD } from '../board-ui.ts';
 import { undo } from '../chess/game.ts';
-import type { GameStore } from '../store/store.ts';
-import { changeGame, gameIdInput, gameResult, handle, plyInput } from './common.ts';
+import { playJevReply } from '../opponents/reply.ts';
+import { changeGame, gameIdInput, gameResult, handle, plyInput, type ToolDeps } from './common.ts';
 
 const input = z.object({
   gameId: gameIdInput,
@@ -13,7 +13,7 @@ const input = z.object({
   plies: z.number().int().min(1).default(2).describe('How many half-moves to take back'),
 });
 
-export function registerUndoMove(server: McpServer, store: GameStore, showsBoard: boolean) {
+export function registerUndoMove(server: McpServer, { store, jev, movesShowBoard }: ToolDeps) {
   const config = {
     title: 'Take back chess moves',
     description:
@@ -24,9 +24,12 @@ export function registerUndoMove(server: McpServer, store: GameStore, showsBoard
   };
   const handler = ({ gameId, ply, plies }: z.infer<typeof input>) =>
     handle(store, gameId, async () =>
-      gameResult(await changeGame(store, gameId, ply, (game) => undo(game, plies))),
+      gameResult(
+        await changeGame(store, gameId, ply, (game) => playJevReply(undo(game, plies), jev)),
+      ),
     );
 
-  if (showsBoard) registerAppTool(server, 'undo_move', { ...config, _meta: SHOWS_BOARD }, handler);
+  if (movesShowBoard)
+    registerAppTool(server, 'undo_move', { ...config, _meta: SHOWS_BOARD }, handler);
   else server.registerTool('undo_move', config, handler);
 }

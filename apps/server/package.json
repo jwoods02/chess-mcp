@@ -3,17 +3,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.ts",
-    "start": "node src/index.ts",
+    "dev": "node --env-file-if-exists=.env --watch src/index.ts",
+    "start": "node --env-file-if-exists=.env src/index.ts",
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@ai-sdk/typesafe-ai": "catalog:",
     "@chess-mcp/board-app": "workspace:*",
     "@chess-mcp/shared": "workspace:*",
     "@hono/node-server": "catalog:",
     "@modelcontextprotocol/ext-apps": "catalog:",
     "@modelcontextprotocol/hono": "catalog:",
     "@modelcontextprotocol/server": "catalog:",
+    "ai": "catalog:",
     "better-sqlite3": "catalog:",
     "chess.js": "catalog:",
     "hono": "catalog:",

@@ -2,10 +2,9 @@ import { Color, GameView } from '@chess-mcp/shared';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { draw } from '../chess/game.ts';
-import type { GameStore } from '../store/store.ts';
-import { changeGame, gameIdInput, gameResult, handle, plyInput } from './common.ts';
+import { changeGame, gameIdInput, gameResult, handle, plyInput, type ToolDeps } from './common.ts';
 
-export function registerDrawOffer(server: McpServer, store: GameStore) {
+export function registerDrawOffer(server: McpServer, { store }: ToolDeps) {
   server.registerTool(
     'draw_offer',
     {

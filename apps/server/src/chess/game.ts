@@ -19,6 +19,16 @@ export interface Move {
   san: string;
   uci: string;
   by: Player;
+  meta?: MoveMeta;
+}
+
+/** Extra detail recorded with an engine's move. */
+export interface MoveMeta {
+  /** Jev's most likely moves, SAN → probability. */
+  probabilities?: Record<string, number>;
+  /** Set when Jev failed and a random legal move was played instead. */
+  fallback?: string;
+  latencyMs?: number;
 }
 
 export type ErrorCode =
@@ -28,6 +38,8 @@ export type ErrorCode =
   | 'not_your_turn'
   | 'stale_state'
   | 'invalid_fen'
+  | 'invalid_players'
+  | 'wrong_tool'
   | 'invalid_undo'
   | 'invalid_draw_action';
 
@@ -44,6 +56,10 @@ export function createGame(input: { white: Player; black: Player; startFen?: str
   const startFen = input.startFen?.trim() || DEFAULT_POSITION;
   const check = validateFen(startFen);
   if (!check.ok) throw new ChessError('invalid_fen', check.error ?? 'Invalid FEN');
+  // Jev only replies to moves made by someone else, so a Jev-vs-Jev game would never progress.
+  if (input.white === 'jev' && input.black === 'jev') {
+    throw new ChessError('invalid_players', 'Jev can only play one side of a game.');
+  }
 
   const now = new Date().toISOString();
   const game: Game = {
@@ -71,7 +87,7 @@ export function replay(game: Game): Chess {
  * Plays `input` (SAN, UCI or a loose form like "nf3" / "0-0") for the side to move, which must be
  * controlled by `by`.
  */
-export function applyMove(game: Game, input: string, by: Player): Game {
+export function applyMove(game: Game, input: string, by: Player, meta?: MoveMeta): Game {
   assertActive(game);
   const chess = replay(game);
   const mover = chess.turn();
@@ -87,7 +103,7 @@ export function applyMove(game: Game, input: string, by: Player): Game {
     throw new ChessError('illegal_move', illegalMoveMessage(chess, input.trim()));
   }
 
-  const move: Move = { san: played.san, uci: played.lan, by };
+  const move: Move = { san: played.san, uci: played.lan, by, ...(meta && { meta }) };
   // A move by the side a draw was offered to declines the offer.
   const drawOffer = game.drawOffer === mover ? game.drawOffer : undefined;
   return withStatus({ ...game, moves: [...game.moves, move], drawOffer }, chess);
@@ -111,14 +127,19 @@ export function undo(game: Game, plies: number): Game {
 
 export function resign(game: Game, color: Color): Game {
   assertActive(game);
+  assertNotJev(game, color);
   return finish(game, color === 'w' ? '0-1' : '1-0', 'resignation');
 }
 
 export function draw(game: Game, action: 'offer' | 'accept' | 'decline', color: Color): Game {
   assertActive(game);
+  assertNotJev(game, color);
   const side = colorName(color);
 
   if (action === 'offer') {
+    if (seat(game, color === 'w' ? 'b' : 'w') === 'jev') {
+      throw new ChessError('invalid_draw_action', "Jev doesn't accept draws: play on or resign.");
+    }
     if (game.drawOffer === color) {
       throw new ChessError('invalid_draw_action', `${side} has already offered a draw.`);
     }
@@ -171,9 +192,25 @@ export function toView(game: Game): GameView {
       from: last.uci.slice(0, 2),
       to: last.uci.slice(2, 4),
       by: last.by,
+      ...(last.by === 'jev' && {
+        jev: { topMoves: last.meta?.probabilities ?? {}, fallback: last.meta?.fallback },
+      }),
     },
     orientation: game.black === 'human' && game.white !== 'human' ? 'b' : 'w',
   };
+}
+
+/** Games against Jev use `play_against_jev` for the human's moves, so Jev's reply is shown. */
+export function hasJev(game: Pick<Game, 'white' | 'black'>): boolean {
+  return game.white === 'jev' || game.black === 'jev';
+}
+
+/** The numbered moves from a PGN, e.g. "1. e4 e5 2. Nf3", without headers or the result. */
+export function moveText(pgn: string): string {
+  return pgn
+    .replace(/^\[.*\]$/gm, '')
+    .trim()
+    .replace(/\s*(\*|1-0|0-1|1\/2-1\/2)$/, '');
 }
 
 export function seat(game: Game, color: Color): Player {
@@ -185,7 +222,7 @@ export function colorName(color: Color): string {
 }
 
 export function playerName(player: Player): string {
-  return player === 'llm' ? 'assistant' : 'human';
+  return { human: 'human', llm: 'assistant', jev: 'Jev' }[player];
 }
 
 // --- helpers ---
@@ -193,6 +230,16 @@ export function playerName(player: Player): string {
 function assertActive(game: Game) {
   if (game.status === 'finished') {
     throw new ChessError('game_over', `The game is over (${game.result}, ${game.termination}).`);
+  }
+}
+
+/** Jev plays its own side, so nobody resigns or answers draw offers for it. */
+function assertNotJev(game: Game, color: Color) {
+  if (seat(game, color) === 'jev') {
+    throw new ChessError(
+      'invalid_players',
+      `${colorName(color)} is played by Jev, which decides for itself.`,
+    );
   }
 }
 

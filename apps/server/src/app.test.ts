@@ -1,12 +1,20 @@
 import type { GameView } from '@chess-mcp/shared';
-import { expect, test } from 'vitest';
+import { Experimental_DecisionMockModelV4 as MockDecisionModel } from 'ai/test';
+import { describe, expect, test } from 'vitest';
 import { createApp } from './app.ts';
 import { BOARD_URI } from './board-ui.ts';
+import { createJev } from './opponents/jev.ts';
+import type { Opponent } from './opponents/opponent.ts';
+import { mockJevModel } from './opponents/mock-jev.ts';
 import { MemoryStore } from './store/memory.ts';
 
-const app = createApp(new MemoryStore());
+const app = createApp({ store: new MemoryStore() });
 
-async function rpc(method: string, params: object = {}, server = app) {
+async function rpc(
+  method: string,
+  params: object = {},
+  server: ReturnType<typeof createApp> = app,
+) {
   const res = await server.request('/mcp', {
     method: 'POST',
     headers: {
@@ -21,8 +29,8 @@ async function rpc(method: string, params: object = {}, server = app) {
   return JSON.parse(data!.slice('data: '.length));
 }
 
-async function callTool(name: string, args: object) {
-  const { result } = await rpc('tools/call', { name, arguments: args });
+async function callTool(name: string, args: object, server: ReturnType<typeof createApp> = app) {
+  const { result } = await rpc('tools/call', { name, arguments: args }, server);
   return result as { isError?: boolean; content: { text: string }[]; structuredContent: GameView };
 }
 
@@ -52,7 +60,7 @@ test('tells the model how to talk about the game', async () => {
 type ToolInfo = { name: string; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } };
 
 /** Tools the model sees (not app-only), and which of those draw the board. */
-async function listTools(server = app) {
+async function listTools(server: ReturnType<typeof createApp> = app) {
   const { result } = await rpc('tools/list', {}, server);
   const forModel = (result.tools as ToolInfo[]).filter(
     (t) => !t._meta?.ui?.visibility?.every((v) => v === 'app'),
@@ -85,7 +93,7 @@ test('lists the game tools, showing the board only when a human needs to see a n
 });
 
 test('marks the tools the board calls itself as callable from the board', async () => {
-  // Hosts refuse board-initiated calls to tools without `_meta.ui` allowing the app.
+  // The spec allows this by default, but we mark it explicitly for stricter hosts.
   const { all } = await listTools();
   for (const name of ['submit_human_move', 'board_state']) {
     expect(all.find((t) => t.name === name)?._meta?.ui?.visibility).toContain('app');
@@ -94,7 +102,7 @@ test('marks the tools the board calls itself as callable from the board', async 
 });
 
 test('in live board mode only starting or showing a game draws a board', async () => {
-  const live = createApp(new MemoryStore(), 'live');
+  const live = createApp({ store: new MemoryStore(), boardMode: 'live' });
   expect((await listTools(live)).showBoard).toEqual(['get_game', 'new_game']);
 
   const read = await rpc('resources/read', { uri: BOARD_URI }, live);
@@ -165,5 +173,156 @@ test('reports an unknown game', async () => {
   expect(result).toMatchObject({
     isError: true,
     content: [{ text: 'Error [game_not_found]: No game with ID nope.' }],
+  });
+});
+
+describe('playing Jev', () => {
+  const withJev = (pick?: string) =>
+    createApp({ store: new MemoryStore(), jev: createJev(mockJevModel(pick)) });
+
+  test('Jev is only offered when the server has a TypeSafe key', async () => {
+    const seats = async (server: ReturnType<typeof createApp>) => {
+      const { result } = await rpc('tools/list', {}, server);
+      const newGame = result.tools.find((t: { name: string }) => t.name === 'new_game');
+      return newGame.inputSchema.properties.white.enum;
+    };
+    expect(await seats(app)).toEqual(['human', 'llm']);
+    expect(await seats(withJev())).toEqual(['human', 'llm', 'jev']);
+  });
+
+  test("Jev replies inside the human's move", async () => {
+    const server = withJev('e5');
+    const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
+    const { gameId } = start.structuredContent;
+
+    const result = await callTool('play_against_jev', { gameId, ply: 0, move: 'e4' }, server);
+
+    expect(result.structuredContent).toMatchObject({
+      moves: ['e4', 'e5'],
+      ply: 2,
+      toMove: 'human',
+    });
+    expect(result.structuredContent.lastMove).toMatchObject({ san: 'e5', by: 'jev' });
+    expect(result.content[0]!.text).toContain('Last move: e5 (Jev; its top choices were e5 100%');
+  });
+
+  test("the human's move against Jev has its own tool, which shows the board", async () => {
+    const server = withJev('e5');
+    const { all } = await listTools(server);
+    expect(all.find((t) => t.name === 'play_against_jev')?._meta?.ui?.resourceUri).toBe(BOARD_URI);
+    expect((await listTools()).names).not.toContain('play_against_jev');
+
+    const vsJev = await callTool('new_game', { white: 'human', black: 'jev' }, server);
+    expect(vsJev.content[0]!.text).toContain('call play_against_jev with ply 0');
+    const wrong = await callTool(
+      'submit_human_move',
+      { gameId: vsJev.structuredContent.gameId, ply: 0, move: 'e4' },
+      server,
+    );
+    expect(wrong.content[0]!.text).toContain('Error [wrong_tool]');
+
+    const vsAssistant = await callTool('new_game', { white: 'human', black: 'llm' }, server);
+    const alsoWrong = await callTool(
+      'play_against_jev',
+      { gameId: vsAssistant.structuredContent.gameId, ply: 0, move: 'e4' },
+      server,
+    );
+    expect(alsoWrong.content[0]!.text).toContain('Error [wrong_tool]');
+  });
+
+  test('Jev moves first when it plays White', async () => {
+    const start = await callTool('new_game', { white: 'jev', black: 'human' }, withJev('d4'));
+    expect(start.structuredContent).toMatchObject({
+      moves: ['d4'],
+      toMove: 'human',
+      orientation: 'b',
+    });
+  });
+
+  test('if Jev fails, a random legal move keeps the game going', async () => {
+    const failing = new MockDecisionModel({
+      doDecide: async () => {
+        throw new Error('Jev is down');
+      },
+    });
+    const server = createApp({ store: new MemoryStore(), jev: createJev(failing) });
+    const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
+
+    const result = await callTool(
+      'play_against_jev',
+      { gameId: start.structuredContent.gameId, ply: 0, move: 'e4' },
+      server,
+    );
+
+    expect(result.structuredContent).toMatchObject({ ply: 2, toMove: 'human' });
+    expect(result.content[0]!.text).toContain(
+      'Jev was unavailable, so a random legal move was played',
+    );
+  });
+
+  test('the assistant can play Jev, and Jev replies inside make_move', async () => {
+    const server = withJev('e5');
+    const start = await callTool('new_game', { white: 'llm', black: 'jev' }, server);
+    const result = await callTool(
+      'make_move',
+      { gameId: start.structuredContent.gameId, ply: 0, move: 'e4' },
+      server,
+    );
+    expect(result.structuredContent).toMatchObject({ moves: ['e4', 'e5'], toMove: 'llm' });
+  });
+
+  test('an illegal answer from Jev falls back to a random legal move', async () => {
+    const illegal: Opponent = { chooseMove: async () => ({ move: 'Ke7' }) }; // the king can't move yet
+    const server = createApp({ store: new MemoryStore(), jev: illegal });
+    const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
+    const result = await callTool(
+      'play_against_jev',
+      { gameId: start.structuredContent.gameId, ply: 0, move: 'e4' },
+      server,
+    );
+    expect(result.structuredContent).toMatchObject({ ply: 2, toMove: 'human' });
+    expect(result.content[0]!.text).toContain('Jev was unavailable');
+  });
+
+  test('a resignation while Jev is thinking is not overwritten', async () => {
+    let answer: (move: { move: string }) => void = () => {};
+    const slow: Opponent = { chooseMove: () => new Promise((resolve) => (answer = resolve)) };
+    const server = createApp({ store: new MemoryStore(), jev: slow });
+    const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
+    const { gameId } = start.structuredContent;
+
+    const move = callTool('play_against_jev', { gameId, ply: 0, move: 'e4' }, server);
+    await new Promise((resolve) => setTimeout(resolve, 10)); // let it reach Jev
+    const resigned = await callTool('resign_game', { gameId, ply: 0, color: 'w' }, server);
+    answer({ move: 'e5' });
+
+    expect(resigned.structuredContent).toMatchObject({
+      status: 'finished',
+      termination: 'resignation',
+    });
+    expect((await move).content[0]!.text).toContain('Error [stale_state]');
+    expect((await callTool('get_game', { gameId }, server)).structuredContent.termination).toBe(
+      'resignation',
+    );
+  });
+
+  test('nobody resigns or answers draws for Jev, and Jev declines draw offers', async () => {
+    const server = withJev('e5');
+    const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
+    const { gameId } = start.structuredContent;
+
+    const resignForJev = await callTool('resign_game', { gameId, ply: 0, color: 'b' }, server);
+    expect(resignForJev.content[0]!.text).toContain('Error [invalid_players]');
+    const offerToJev = await callTool(
+      'draw_offer',
+      { gameId, ply: 0, action: 'offer', color: 'w' },
+      server,
+    );
+    expect(offerToJev.content[0]!.text).toContain("Jev doesn't accept draws");
+  });
+
+  test('Jev can only play one side', async () => {
+    const result = await callTool('new_game', { white: 'jev', black: 'jev' }, withJev());
+    expect(result.content[0]!.text).toContain('Error [invalid_players]');
   });
 });

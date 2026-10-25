@@ -34,3 +34,13 @@ test('tells the model what to do next', () => {
   expect(text).toContain('Last move: e4 (human)');
   expect(text).toContain("It's your turn (you play Black): call make_move with ply 1.");
 });
+
+test('numbers moves correctly when Black moves first', () => {
+  const start = '4k3/8/8/8/8/8/4P3/4K3 b - - 0 12';
+  const game = applyMove(
+    createGame({ white: 'human', black: 'llm', startFen: start }),
+    'Kd7',
+    'llm',
+  );
+  expect(gameText(toView(game))).toContain('Moves: 12. ... Kd7');
+});

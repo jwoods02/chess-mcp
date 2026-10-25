@@ -13,8 +13,8 @@ export class MemoryStore implements GameStore {
     this.#games.set(game.id, game);
   }
 
-  async update(game: Game, expectedPly: number) {
-    if (this.#games.get(game.id)?.moves.length !== expectedPly) return false;
+  async update(game: Game, previous: Game) {
+    if (JSON.stringify(this.#games.get(game.id)) !== JSON.stringify(previous)) return false;
     this.#games.set(game.id, game);
     return true;
   }

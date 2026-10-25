@@ -3,11 +3,10 @@ import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { BOARD_URI } from '../board-ui.ts';
-import type { GameStore } from '../store/store.ts';
-import { gameIdInput, gameResult, handle, loadGame } from './common.ts';
+import { gameIdInput, gameResult, handle, loadGame, type ToolDeps } from './common.ts';
 
 /** For the board UI only (hidden from the model): fetches the latest position to stay up to date. */
-export function registerBoardState(server: McpServer, store: GameStore) {
+export function registerBoardState(server: McpServer, { store }: ToolDeps) {
   registerAppTool(
     server,
     'board_state',

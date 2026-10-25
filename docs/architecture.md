@@ -122,7 +122,8 @@ interface Game {
 interface Move {
   san: string; // 'Nf3'
   uci: string; // 'g1f3'
-  by: Player; // derived from the seat that moved; callers don't pass it
+  by: Player; // who moved; the tool passes it and it must match the seat to move
+  meta?: { probabilities?: Record<string, number>; fallback?: string; latencyMs?: number }; // Jev's moves
   meta?: Record<string, unknown>; // e.g. Jev's move probabilities (M3)
 }
 ```
@@ -134,7 +135,8 @@ repetition, and it's trivially cheap. The current FEN is derived, not stored.
 `chess/game.ts` holds a handful of plain functions, with no classes or service layers:
 
 - `createGame({ white, black, startFen? }) → Game`
-- `applyMove(game, input) → Game`: plays a move for the side to move. It accepts SAN (`Nf3`), UCI
+- `applyMove(game, input, by) → Game`: plays a move for the side to move, which must be controlled by
+  `by` (otherwise `not_your_turn`). It accepts SAN (`Nf3`), UCI
   (`g1f3`, `e7e8q`) and loose forms (`nf3`, `0-0`). Promotions must name the piece. It throws a
   `ChessError` with a `code` on anything illegal, and sets status/result/termination when the game
   ends. Threefold repetition and the 50-move rule end the game automatically, as chess.js does.
@@ -158,12 +160,15 @@ The model and the board UI can both act on a game, and either might be looking a
 One mechanism covers both cases:
 
 - `ply` is the number of half-moves played (`moves.length`, 0 at the start). Every response includes it.
-- Every tool that changes a game (`make_move`, `submit_human_move`, `undo_move`, `resign_game`, `draw_offer`) **requires**
+- Every tool that changes a game (`make_move`, `submit_human_move`, `play_against_jev`, `undo_move`,
+  `resign_game`, `draw_offer`) **requires**
   the `ply` the caller last saw. If it doesn't match the game, nothing changes and the call returns
   `stale_state` with the current board. The model is never surprised by a move it didn't see.
-- The database write is conditional on the same number (`UPDATE … WHERE id = ? AND ply = ?`). If two
-  requests race, for example while a Jev call is in flight, the second write affects no rows and also
-  returns `stale_state`.
+- The database write is conditional on the game being exactly as it was loaded (`UPDATE … WHERE id = ?
+  AND data = ?`, comparing the stored JSON). If two requests race, for example a resignation landing
+  while a Jev call is in flight, the second write affects no rows and returns `stale_state`. Checking
+  `ply` alone isn't enough here: a resignation, a draw offer or an undo followed by new moves can leave
+  the ply unchanged.
 
 "Ply" is the standard chess-programming term for a half-move (engines and the Lichess API use it). We
 avoid "move number" because in chess notation "move 1" covers both `e4` and `e5`.
@@ -175,7 +180,7 @@ avoid "move number" because in chess notation "move 1" covers both `e4` and `e5`
 interface GameStore {
   get(id: string): Promise<Game | undefined>;
   create(game: Game): Promise<void>;
-  update(game: Game, expectedPly: number): Promise<boolean>; // false = someone else changed it first
+  update(game: Game, previous: Game): Promise<boolean>; // false = changed since `previous` was loaded
 }
 ```
 
@@ -238,7 +243,13 @@ interface GameView {
   termination?: string;
   inCheck: boolean;
   drawOffer?: Color; // pending draw offer from this side
-  lastMove?: { san: string; from: string; to: string; by: Player };
+  lastMove?: {
+    san: string;
+    from: string;
+    to: string;
+    by: Player;
+    jev?: { topMoves: Record<string, number>; fallback?: string }; // when Jev moved
+  };
   orientation: Color; // board orientation for the UI: the human's colour
   coaching?: CoachingBlock; // M5
 }
@@ -247,7 +258,7 @@ interface GameView {
 ### Text response
 
 ```
-Game 3f2c…  ·  You (White) vs Claude (Black)
+Game 3f2c… · White: human · Black: assistant
 
 8 │ r n b q k b n r
 7 │ p p p p . p p p
@@ -263,24 +274,27 @@ Game 3f2c…  ·  You (White) vs Claude (Black)
 FEN: rnbqkb1r/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2
 Moves: 1. e4 e5 2. Nf3
 Last move: Nf3 (human)
-Draw offer: none (this line only appears when an offer is pending)
-Status: Black to move. It's your (Claude's) turn: call make_move.
+Ply: 3
+Status: Black to move. It's your turn (you play Black): call make_move with ply 3.
 ```
 
-ASCII letters (more reliable for models than Unicode glyphs), flipped when the human plays Black.
+ASCII letters (more reliable for models than Unicode glyphs), flipped when the human plays Black. A
+`Draw offer:` line appears only while an offer is pending, and Jev's moves add its top choices
+("Last move: Bc5 (Jev; its top choices were Bc5 27%, Nxe4 21%…)").
 
-### M1 tools
+### Tools
 
-| Tool                | Input                                                              | Shows the board | Notes                                                                       |
-| ------------------- | ------------------------------------------------------------------ | --------------- | --------------------------------------------------------------------------- |
-| `new_game`          | `{ white: Player, black: Player, startFen? }`                      | ✅              | Returns a new UUID.                                                         |
-| `get_game`          | `{ gameId }`                                                       | ✅              | Also how the model shows the board after a human move when needed.          |
-| `make_move`         | `{ gameId, ply, move }`                                            | ✅              | The **assistant's** move. Rejected (`not_your_turn`) if a human is to move. |
-| `submit_human_move` | `{ gameId, ply, move }`                                            | –               | Relays a move the **human** made. Rejected if the assistant is to move.     |
-| `legal_moves`       | `{ gameId, square? }`                                              | –               | SAN list, optionally for one piece.                                         |
-| `undo_move`         | `{ gameId, ply, plies?: number }`                                  | ✅              | Default 2 (back to the human's turn).                                       |
-| `resign_game`       | `{ gameId, ply, color }`                                           | –               | `color` = the side resigning.                                               |
-| `draw_offer`        | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | –               | `color` = the side acting. See [Draw offers](#draw-offers).                 |
+| Tool                | Input                                                              | Shows the board | Notes                                                                        |
+| ------------------- | ------------------------------------------------------------------ | --------------- | ---------------------------------------------------------------------------- |
+| `new_game`          | `{ white: Player, black: Player, startFen? }`                      | ✅              | Returns a new UUID.                                                          |
+| `get_game`          | `{ gameId }`                                                       | ✅              | Also how the model shows the board after a human move when needed.           |
+| `make_move`         | `{ gameId, ply, move }`                                            | ✅              | The **assistant's** move. Rejected (`not_your_turn`) if a human is to move.  |
+| `submit_human_move` | `{ gameId, ply, move }`                                            | –               | Relays a move the **human** made, in games not against Jev.                  |
+| `play_against_jev`  | `{ gameId, ply, move }`                                            | ✅              | The human's move against Jev; Jev replies in the same call. Only with a key. |
+| `legal_moves`       | `{ gameId, square? }`                                              | –               | SAN list, optionally for one piece.                                          |
+| `undo_move`         | `{ gameId, ply, plies?: number }`                                  | ✅              | Default 2 (back to the human's turn).                                        |
+| `resign_game`       | `{ gameId, ply, color }`                                           | –               | `color` = the side resigning.                                                |
+| `draw_offer`        | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | –               | `color` = the side acting. See [Draw offers](#draw-offers).                  |
 
 `ply` is the guard described in [Staleness and concurrency](#staleness-and-concurrency-the-ply-guard).
 "Shows the board" means the tool is linked to the board UI (`_meta.ui.resourceUri`). See
@@ -296,11 +310,15 @@ is fixed in the tool list, not chosen per call. So the rule is set per tool:
 - The human already knows the move they just made, so `submit_human_move` is text-only. The board
   appears with the assistant's reply (`make_move`), showing both moves: one board per round.
 - Resigning and draw offers don't change the position, so they don't redraw it.
-- When a human move leaves a position a human hasn't seen (the game ended on their move, the next
-  side is also human, or later an engine replied inside the call), the `submit_human_move` result tells
-  the model to call `get_game`. That rule covers human-vs-human, human-vs-Jev and puzzles too.
-- The server enforces which move tool applies (`not_your_turn`), and the error names the right tool,
-  so the model corrects itself.
+- Against Jev, the human's move always comes back with a new position (Jev's reply), so those games
+  use a separate tool, `play_against_jev`, that does draw the board. We know the players when the game
+  starts, but board-drawing is fixed per tool in the host's tool list, so the choice has to be a
+  different tool rather than a per-game setting. Relying on the model to call `get_game` afterwards
+  was tried first and failed in practice.
+- When a human move still leaves a position a human hasn't seen (the game ended on their move, or the
+  next side is also human), the `submit_human_move` result tells the model to call `get_game`.
+- The server enforces which move tool applies (`not_your_turn` for the wrong side, `wrong_tool` for
+  the wrong kind of game), and the error names the right tool, so the model corrects itself.
 
 How this holds up for later modes, compared with the [live board](#mcp-app-board-ui) stretch goal:
 
@@ -308,7 +326,7 @@ How this holds up for later modes, compared with the [live board](#mcp-app-board
 | ------------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------- |
 | Human vs assistant                   | One board per round                                            | One board per game                                      |
 | Human delivers mate / human vs human | Model calls `get_game` when prompted                           | Board updates in place                                  |
-| Human vs Jev (M3)                    | Jev replies inside `submit_human_move`; model calls `get_game` | Drag, Jev replies in the same call, no model round trip |
+| Human vs Jev (M3)                    | `play_against_jev` shows the board with Jev's reply            | Drag, Jev replies in the same call, no model round trip |
 | Coaching: question before your move  | Board and question arrive together                             | Works; the board may have scrolled out of view          |
 | Coaching: hints with arrows          | Needs a "show board with arrows" tool (fresh board)            | Arrows stored on the game; the live board picks them up |
 | Coaching: post-game review           | Needs a "show board at ply N" tool                             | Same need; the board steps through in place             |
@@ -317,9 +335,10 @@ How this holds up for later modes, compared with the [live board](#mcp-app-board
 
 ### Error codes
 
-`game_not_found`, `game_over`, `illegal_move`, `not_your_turn` (wrong move tool for the side to move) (includes the legal moves), `stale_state` (includes
-the current view), `invalid_fen`, `invalid_undo` (nothing to take back), `invalid_draw_action` (e.g.
-accepting when no offer is pending).
+`game_not_found`, `game_over`, `illegal_move` (includes the legal moves), `not_your_turn` (wrong
+move tool for the side to move), `wrong_tool` (e.g. `submit_human_move` in a game against Jev),
+`stale_state` (includes the current view), `invalid_fen`, `invalid_players` (Jev on both sides),
+`invalid_undo` (nothing to take back), `invalid_draw_action` (e.g. accepting when no offer is pending).
 
 ### Later tools (sketch)
 
@@ -372,7 +391,7 @@ App connects → ontoolresult(result) → render(result.structuredContent as Gam
   1. Only the human's pieces can be dragged, and only on their turn. A dropped piece shows on its new
      square straight away while the server checks it.
   2. A pawn dropped on the last rank opens a promotion picker (queen, rook, bishop, knight).
-  3. The app calls `submit_human_move` itself and re-renders from the returned view. If the move is
+  3. The app calls `submit_human_move` (or `play_against_jev` in a Jev game) itself and re-renders from the returned view. If the move is
      illegal or stale, the board goes back to the server's position and says why.
   4. The model didn't see that call, so the app tells it: `updateModelContext` with the full result
      text, then, if the assistant is next, `sendMessage("I played e4.")` so it replies with
@@ -406,51 +425,54 @@ App connects → ontoolresult(result) → render(result.structuredContent as Gam
 ```ts
 // opponents/opponent.ts
 interface Opponent {
-  chooseMove(input: {
-    fen: string;
-    history: string[];
-    legalMoves: string[];
-  }): Promise<{ move: string; meta?: Record<string, unknown> }>;
+  chooseMove(position: { fen: string; history: string[]; legalMoves: string[] }): Promise<{
+    move: string;
+    meta?: Record<string, unknown>;
+  }>;
 }
 ```
 
-- The server validates every returned move. On failure or timeout it retries once, then falls back to
-  a random legal move (recorded in `meta`).
-- When a move (usually `submit_human_move`) leaves the turn with an engine seat, the server plays the engine's reply in
-  the same call and returns both moves.
+- **When it plays:** any call that hands the turn to a Jev seat plays Jev's reply in the same call
+  (`playJevReply` in `opponents/reply.ts`): `play_against_jev`, `make_move` (LLM vs Jev), `undo_move`,
+  and `new_game` when Jev plays White. The human's move and Jev's reply are saved in one conditional write.
+- **chess.js decides, Jev only chooses.** chess.js produces the legal moves Jev chooses from, checks
+  Jev's answer against them, and plays it through the same `applyMove` as every other move.
+- **Timeouts and failure:** each Jev call has a 2.5s timeout and no SDK retries. If Jev errors, times
+  out or returns something illegal, the server retries once, then plays a random legal move and records
+  why in the move's `meta`, so the game never gets stuck. The result text says when this happened.
+- **Draws and resigning:** nobody can resign or answer a draw offer for Jev's side (`invalid_players`),
+  and offering Jev a draw is declined ("Jev doesn't accept draws: play on or resign").
+- **Known gaps:** if the server restarts without a key, existing Jev games wait for a Jev that isn't
+  there (the status says so). Undo landing on Jev's turn makes Jev move again, often the same move.
+- **One Jev seat per game.** Jev only replies to someone else's move, so Jev vs Jev would never progress
+  (`invalid_players`). Watching Jev play itself needs a stepping tool, which is a later addition.
 
 ### Jev
 
-Jev is TypeSafe AI's _System One_ model, not an LLM. You send it `state` plus typed questions, and it
-answers with calibrated probabilities in one pass.
+Jev is TypeSafe AI's _System One_ model, not an LLM. It takes a `state` plus typed questions and
+returns calibrated probabilities in one pass. We call it through the **AI SDK**
+(`experimental_decide` from `ai`) with the official **`@ai-sdk/typesafe-ai`** provider, which talks to
+TypeSafe's System One API directly. Using the AI SDK keeps the door open to other decision models
+(for example Cloudflare's Clef) as providers add them: swapping is a different `decisionModel`.
 
-```http
-POST https://api.typesafe.ai/v1/systemone
-Authorization: Bearer $JEV_API_KEY
-
-{
-  "model": "jev-latest",
-  "state": { "fen": "…", "sideToMove": "white", "moves": "1. e4 e5 2. Nf3", "board": "<ascii>" },
-  "questions": {
-    "move": {
-      "type": "choice",
-      "instructions": "Pick the strongest move for White in this chess position.",
-      "criteria": { "Nc3": "Knight b1->c3", "Nxe5": "Knight f3->e5, captures pawn", "…": "…" }
-    }
-  }
-}
-→ { "answers": { "move": { "choice": "Nc3", "probabilities": { "Nc3": 0.41, … }, "confidence": 0.41 } } }
-```
-
-- The options are the **legal moves**, so Jev can't pick an illegal one.
-- Take the highest-probability legal move ourselves instead of trusting `choice`, because ties happen
-  with 30+ options.
-- **Strength:** sample from the probabilities with a temperature instead of always taking the top move.
-- Keep the probabilities in `Move.meta`. They feed coaching ("Jev rated your move at 3%").
-- Env: `JEV_API_KEY`, `JEV_BASE_URL` (gateways like Vercel AI Gateway or OpenRouter use different URLs
-  and model IDs), `JEV_MODEL` (default `jev-latest`).
-- Third-party benchmarks show it plays weakly (it loses to Stockfish at its lowest level). That's fine
-  for beginner practice.
+- **Enabled only with a key.** `TYPESAFE_AI_API_KEY` in `apps/server/.env` (see `.env.example`).
+  Without it, `new_game` doesn't offer `jev` and the server instructions don't mention it.
+  `JEV_MODEL` picks the version (default `jev-latest`; also `jev-preview`, `jev-1.14.0`, `jev-1.13.0`).
+- **How a move is chosen** (`opponents/jev.ts`): the state is the FEN, side to move, moves so far and
+  an ASCII board. There is one `choice` question, "Pick the strongest move for White", whose options are
+  **every legal move**, keyed by SAN and described ("Knight g1→f3, captures pawn, check"). Chess never
+  has more than 218 legal moves, inside Jev's 255-option limit, and Jev can only answer with one of them.
+  We take the highest-probability legal move ourselves rather than trusting `choice` alone, in case
+  rounded probabilities tie.
+- **What we keep:** Jev's top five moves with probabilities, stored on the move and returned as
+  `GameView.lastMove.jev.topMoves` ("its top choices were Bc5 27%, Nxe4 21%…"). That's the raw material
+  for coaching.
+- **Live results (2026-10-25):** 135–300ms per move. It plays human-like openings (1.e4 at 81% from the
+  start), takes a hanging queen (63%) and finds a mate in one (69%). Third-party benchmarks still show
+  it losing to Stockfish's weakest level, so expect a beginner-to-club sparring partner.
+- **Not built yet:** strength control by sampling from the distribution with a temperature.
+- **Tests** use the AI SDK's `Experimental_DecisionMockModelV4` (`opponents/mock-jev.ts`), so they make no
+  network calls.
 
 ## Coaching modes (M5)
 
@@ -490,28 +512,32 @@ interface CoachingBlock {
   promotion) and undo.
 - `store`: one small test file run against both `memory` and `sqlite`.
 - Server: an in-process test that drives `app.request('/mcp', …)` through a full scripted game.
-- Jev (M3): a mocked `fetch`. A live test runs only when `JEV_API_KEY` is set.
+- Jev (M3): the AI SDK's mock decision model (`opponents/mock-jev.ts`) and small stub opponents for
+  failures, illegal answers and a slow reply racing a resignation. No network in tests.
 
 ## Tooling
 
 - Root scripts: `pnpm dev | dev:live | build | typecheck | test | lint | format | inspect`.
-- `tsconfig.base.json`: `strict`, `module: nodenext`, `verbatimModuleSyntax`, `erasableSyntaxOnly`,
-  `rewriteRelativeImportExtensions` (source imports use `.ts` and run directly in Node).
-- Env (`PORT`, `DATABASE_PATH`, `JEV_*`) is read once in `index.ts`.
+- Each package has its own `tsconfig.json` (`strict`, `verbatimModuleSyntax`, `erasableSyntaxOnly`,
+  `allowImportingTsExtensions`, `noEmit`). Source imports use `.ts` and run directly in Node; `tsc` only
+  typechecks.
+- Env (`PORT`, `DATABASE_PATH`, `BOARD_MODE`, `TYPESAFE_AI_API_KEY`, `JEV_MODEL`) is read once in
+  `index.ts`, loaded from `apps/server/.env` by Node's `--env-file-if-exists`.
 
 ## Decisions
 
-| #   | Decision                                                                    | Why                                                                                      |
-| --- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| 1   | Hono plus the official `@modelcontextprotocol/hono`                         | First-party SDK support, small, web-standard.                                            |
-| 2   | Stateless MCP transport, games in a DB keyed by UUID                        | The model and UI share state through the server. Simple.                                 |
-| 3   | Game = `startFen + moves`. FEN is derived.                                  | Needed for repetition detection, and it's a single source of truth.                      |
-| 4   | `better-sqlite3`, one table, JSON column, no ORM or migrations framework    | Least code that works. The `GameStore` interface allows swapping later.                  |
-| 5   | Three packages: `server`, `board-app`, `shared`                             | UI is separate, as required. Everything else stays in the server until it needs to move. |
-| 6   | Every tool returns full text **and** `structuredContent`                    | Text-only clients are first-class.                                                       |
-| 7   | Mutating tools require the `ply` the caller saw; DB write conditional on it | One mechanism stops stale views and racing writes. No separate version field.            |
-| 8   | React with `react-chessboard`                                               | MIT, inline SVG pieces, drag/drop for the stretch goal.                                  |
-| 9   | Engine replies are played inside the move call that hands them the turn     | One call per human move. Simpler for the model and the UI.                               |
-| 10  | No auth. Game UUIDs are the only identifier.                                | Out of scope for v1.                                                                     |
-| 11  | Local only, no deploy                                                       | Focus on the product first.                                                              |
-| 12  | Separate `make_move` (assistant) and `submit_human_move` (human) tools      | Board-linking is per tool; the human's own move shouldn't redraw the board.              |
+| #   | Decision                                                                                  | Why                                                                                                     |
+| --- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 1   | Hono plus the official `@modelcontextprotocol/hono`                                       | First-party SDK support, small, web-standard.                                                           |
+| 2   | Stateless MCP transport, games in a DB keyed by UUID                                      | The model and UI share state through the server. Simple.                                                |
+| 3   | Game = `startFen + moves`. FEN is derived.                                                | Needed for repetition detection, and it's a single source of truth.                                     |
+| 4   | `better-sqlite3`, one table, JSON column, no ORM or migrations framework                  | Least code that works. The `GameStore` interface allows swapping later.                                 |
+| 5   | Three packages: `server`, `board-app`, `shared`                                           | UI is separate, as required. Everything else stays in the server until it needs to move.                |
+| 6   | Every tool returns full text **and** `structuredContent`                                  | Text-only clients are first-class.                                                                      |
+| 7   | Mutating tools require the `ply` the caller saw; saves are conditional on the loaded game | `ply` catches stale views; comparing the stored game catches racing writes, including same-ply changes. |
+| 8   | React with `react-chessboard`                                                             | MIT, inline SVG pieces, drag/drop for the stretch goal.                                                 |
+| 9   | Engine replies are played inside the move call that hands them the turn                   | One call per human move. Simpler for the model and the UI.                                              |
+| 10  | No auth. Game UUIDs are the only identifier.                                              | Out of scope for v1.                                                                                    |
+| 11  | Local only, no deploy                                                                     | Focus on the product first.                                                                             |
+| 12  | Separate `make_move` (assistant) and `submit_human_move` (human) tools                    | Board-linking is per tool; the human's own move shouldn't redraw the board.                             |
+| 13  | Separate `play_against_jev` tool for the human's moves against Jev                        | Jev's reply arrives in the same call, so the board must show; per-tool linking forces a separate tool.  |

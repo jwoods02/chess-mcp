@@ -5,7 +5,7 @@ move on, except where a feature is explicitly UI-only.
 
 ---
 
-## M1 — Play a game (current focus)
+## M1 — Play a game (built)
 
 The foundation: a human and an agent can play a complete, legal game of chess over many turns.
 
@@ -27,7 +27,7 @@ The foundation: a human and an agent can play a complete, legal game of chess ov
 - Every tool response includes a text board and a FEN, plus structured content.
 - It runs locally with `pnpm dev` and connects from an MCP client over HTTP.
 
-## M2 — Board UI (MCP App)
+## M2 — Board UI (MCP App) (built)
 
 - A chess.com-style board (light/dark squares, piece icons, coordinates) rendered inline when a
   game tool is called.
@@ -41,17 +41,19 @@ The foundation: a human and an agent can play a complete, legal game of chess ov
   for your moves and the assistant's replies. Compare it with the default board-per-round.
 - **Later:** click-to-move and legal-move dots, and a floating (picture-in-picture) live board.
 
-## M3 — Opponents: Jev
+## M3 — Opponents: Jev (play built; coaching next)
 
 Add a non-LLM AI opponent so that the LLM can _coach_ instead of _play_.
 
-- Configure a seat as `jev`. When it's Jev's turn the server asks Jev for a move, validates it and
-  applies it, either automatically after the human moves or on request.
+- **Built:** configure a seat as `jev` (only offered when a TypeSafe key is set). When it's Jev's turn
+  the server asks Jev for a move, validates it and plays it inside the same call, so dragging a piece
+  against Jev gets an instant reply on every host.
 - Jev returns a probability for each legal move. We keep that distribution: it is a strong coaching
   signal ("Jev's intuition gave your move 2%; it favoured Nxe5 at 41%").
 - Strength control by sampling from Jev's distribution with a temperature, rather than always taking
   the top move.
-- Modes: **human vs Jev with the LLM as coach**, LLM vs Jev (as a spectator sport or demo), and Jev vs Jev.
+- Modes: **human vs Jev with the LLM as coach** and LLM vs Jev (built). Jev vs Jev needs a stepping tool
+  (later). Coaching while you play Jev is the next design question.
 
 > **About Jev:** TypeSafe AI's _System One_ model. It is not an LLM: it takes a state plus typed
 > questions (`choice`, yes/no, `score`) and returns calibrated probabilities in a single pass. It is

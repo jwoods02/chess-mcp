@@ -15,8 +15,8 @@ export type BoardMode = 'per-round' | 'live';
 export const SHOWS_BOARD = { ui: { resourceUri: BOARD_URI } };
 
 /**
- * Put on a tool's `_meta` so the board can call it without drawing a board. Hosts refuse calls from
- * the board to tools that aren't marked like this.
+ * Put on a tool's `_meta` to say explicitly that the board may call it, without drawing a board.
+ * The spec's default visibility already allows this, but some hosts are stricter than the spec.
  */
 export const CALLABLE_FROM_BOARD = { ui: { visibility: ['model', 'app'] } };
 

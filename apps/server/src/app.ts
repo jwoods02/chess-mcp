@@ -1,17 +1,14 @@
 import { createMcpHonoApp } from '@modelcontextprotocol/hono';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import type { Context } from 'hono';
-import type { BoardMode } from './board-ui.ts';
-import { buildMcpServer } from './mcp.ts';
-import type { GameStore } from './store/store.ts';
+import { buildMcpServer, type ServerOptions } from './mcp.ts';
 
-export function createApp(
-  store: GameStore,
-  boardMode: BoardMode = 'per-round',
-  { logRequests = false } = {},
-) {
+export function createApp({
+  logRequests = false,
+  ...options
+}: ServerOptions & { logRequests?: boolean }) {
   // Stateless: a fresh McpServer per request. Games live in the store, keyed by ID.
-  const mcp = createMcpHandler(() => buildMcpServer(store, boardMode));
+  const mcp = createMcpHandler(() => buildMcpServer(options));
 
   // createMcpHonoApp adds JSON body parsing and localhost Host/Origin validation.
   const app = createMcpHonoApp();

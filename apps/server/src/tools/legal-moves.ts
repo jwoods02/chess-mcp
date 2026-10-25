@@ -1,10 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { legalMoves } from '../chess/game.ts';
-import type { GameStore } from '../store/store.ts';
-import { gameIdInput, handle, loadGame } from './common.ts';
+import { gameIdInput, handle, loadGame, type ToolDeps } from './common.ts';
 
-export function registerLegalMoves(server: McpServer, store: GameStore) {
+export function registerLegalMoves(server: McpServer, { store }: ToolDeps) {
   server.registerTool(
     'legal_moves',
     {

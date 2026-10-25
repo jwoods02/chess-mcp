@@ -168,7 +168,7 @@ the host's model for a completion without a chat turn. The ext-apps SDK exposes 
 rare, and neither Claude's nor OpenAI's docs mention it.
 
 The only way to get a reply with no model turn is to have the opponent run on our server. That's what
-Jev (milestone M3) does: its move is computed inside the `submit_human_move` call, so the board shows
+Jev (milestone M3) does: its move is computed inside the human's move call (`play_against_jev`), so the board shows
 the reply immediately on every host, Claude Code included. An LLM coach watching that game still needs
 a turn to comment, so its commentary arrives with the human's next message or a board-posted one.
 
@@ -189,7 +189,7 @@ dragging as an enhancement whose smoothness depends on the host.
 
 The server logs one line per MCP request, for example `tools/call submit_human_move → 200`. That's the
 quickest way to tell whether a board's call reached us. The board logs its own failures to the browser
-console as `submit_human_move failed…`. In Claude Desktop, Anthropic's troubleshooting page describes
+console as `Sending the move failed…`. In Claude Desktop, Anthropic's troubleshooting page describes
 enabling Developer Mode (Help → Troubleshooting → Enable Developer Mode), then opening the inspector
 with Cmd+Option+I to look inside the board's frame
 ([troubleshooting](https://claude.com/docs/connectors/building/mcp-apps/troubleshooting)). Claude caches

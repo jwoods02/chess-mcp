@@ -1,5 +1,5 @@
 import type { Color, GameView } from '@chess-mcp/shared';
-import { colorName, playerName } from './game.ts';
+import { colorName, hasJev, moveText, playerName } from './game.ts';
 
 /** The full text response for a game: board, FEN, moves, status and what should happen next. */
 export function gameText(view: GameView): string {
@@ -9,10 +9,10 @@ export function gameText(view: GameView): string {
     board(view.fen, view.orientation),
     '',
     `FEN: ${view.fen}`,
-    `Moves: ${numberedMoves(view.moves) || '(none yet)'}`,
+    `Moves: ${moveText(view.pgn) || '(none yet)'}`,
   ];
   if (view.lastMove)
-    lines.push(`Last move: ${view.lastMove.san} (${playerName(view.lastMove.by)})`);
+    lines.push(`Last move: ${view.lastMove.san} (${lastMoveDetail(view.lastMove)})`);
   if (view.drawOffer) lines.push(`Draw offer: ${colorName(view.drawOffer)} has offered a draw.`);
   lines.push(`Ply: ${view.ply}`, `Status: ${status(view)}`);
   return lines.join('\n');
@@ -43,16 +43,22 @@ function status(view: GameView): string {
   }
   const side = colorName(view.turn);
   const check = view.inCheck ? ` ${side} is in check.` : '';
+  if (view.toMove === 'jev') {
+    return `${side} to move. Waiting for Jev, which isn't available on this server (no TypeSafe API key).`;
+  }
   if (view.toMove === 'llm') {
     return `${side} to move.${check} It's your turn (you play ${side}): call make_move with ply ${view.ply}.`;
   }
-  return `${side} to move.${check} Waiting for the human: ask for their move, then call submit_human_move with ply ${view.ply}.`;
+  const tool = hasJev(view) ? 'play_against_jev' : 'submit_human_move';
+  return `${side} to move.${check} Waiting for the human: ask for their move, then call ${tool} with ply ${view.ply}.`;
 }
 
-function numberedMoves(moves: string[]): string {
-  const parts: string[] = [];
-  for (let i = 0; i < moves.length; i += 2) {
-    parts.push(`${i / 2 + 1}. ${moves.slice(i, i + 2).join(' ')}`);
-  }
-  return parts.join(' ');
+/** Who played the last move, plus Jev's top choices when it was Jev's move. */
+function lastMoveDetail(move: NonNullable<GameView['lastMove']>): string {
+  if (!move.jev) return playerName(move.by);
+  if (move.jev.fallback) return `Jev was unavailable, so a random legal move was played`;
+  const top = Object.entries(move.jev.topMoves)
+    .map(([san, p]) => `${san} ${Math.round(p * 100)}%`)
+    .join(', ');
+  return top ? `Jev; its top choices were ${top}` : 'Jev';
 }

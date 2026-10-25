@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import type { Game } from '../chess/game.ts';
 import type { GameStore } from './store.ts';
 
-/** SQLite store: one row per game, the whole game as JSON. `ply` is kept as a column for updates. */
+/** SQLite store: one row per game, the whole game as JSON. `ply` is a column for easy querying. */
 export class SqliteStore implements GameStore {
   #db: Database.Database;
 
@@ -36,10 +36,18 @@ export class SqliteStore implements GameStore {
       .run(game.id, game.moves.length, JSON.stringify(game), game.createdAt, game.updatedAt);
   }
 
-  async update(game: Game, expectedPly: number) {
+  async update(game: Game, previous: Game) {
+    // Comparing the whole stored JSON catches every change, including ones that keep the same ply
+    // (a resignation, a draw offer, an undo followed by new moves).
     const { changes } = this.#db
-      .prepare('UPDATE games SET ply = ?, data = ?, updated_at = ? WHERE id = ? AND ply = ?')
-      .run(game.moves.length, JSON.stringify(game), game.updatedAt, game.id, expectedPly);
+      .prepare('UPDATE games SET ply = ?, data = ?, updated_at = ? WHERE id = ? AND data = ?')
+      .run(
+        game.moves.length,
+        JSON.stringify(game),
+        game.updatedAt,
+        game.id,
+        JSON.stringify(previous),
+      );
     return changes === 1;
   }
 

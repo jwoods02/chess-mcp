@@ -2,7 +2,17 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { ChessError, toView, type Game } from '../chess/game.ts';
 import { gameText } from '../chess/text.ts';
+import type { Opponent } from '../opponents/opponent.ts';
 import type { GameStore } from '../store/store.ts';
+
+/** What the tools need, built once per server. */
+export interface ToolDeps {
+  store: GameStore;
+  /** Present only when a Jev API key is configured. */
+  jev?: Opponent;
+  /** False in live board mode, where one board per game updates itself. */
+  movesShowBoard: boolean;
+}
 
 export const gameIdInput = z.string().describe('Game ID returned by new_game');
 export const plyInput = z
@@ -31,12 +41,14 @@ export async function changeGame(
   store: GameStore,
   gameId: string,
   ply: number,
-  change: (game: Game) => Game,
+  change: (game: Game) => Game | Promise<Game>,
 ): Promise<Game> {
   const game = await loadGame(store, gameId);
   if (game.moves.length !== ply) throw staleError(game.moves.length, ply);
-  const changed = change(game);
-  if (!(await store.update(changed, ply))) throw staleError(undefined, ply);
+  // May await Jev's reply. The save only succeeds if the stored game is still the one we loaded,
+  // so a resignation or move that lands meanwhile isn't overwritten.
+  const changed = await change(game);
+  if (!(await store.update(changed, game))) throw staleError(undefined, ply);
   return changed;
 }
 

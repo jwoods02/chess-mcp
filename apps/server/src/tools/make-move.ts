@@ -4,8 +4,8 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { SHOWS_BOARD } from '../board-ui.ts';
 import { applyMove } from '../chess/game.ts';
-import type { GameStore } from '../store/store.ts';
-import { changeGame, gameIdInput, gameResult, handle, plyInput } from './common.ts';
+import { playJevReply } from '../opponents/reply.ts';
+import { changeGame, gameIdInput, gameResult, handle, plyInput, type ToolDeps } from './common.ts';
 
 const input = z.object({
   gameId: gameIdInput,
@@ -13,7 +13,7 @@ const input = z.object({
   move: z.string().describe('The move in SAN or UCI'),
 });
 
-export function registerMakeMove(server: McpServer, store: GameStore, showsBoard: boolean) {
+export function registerMakeMove(server: McpServer, { store, jev, movesShowBoard }: ToolDeps) {
   const config = {
     title: 'Make your chess move',
     description:
@@ -26,9 +26,14 @@ export function registerMakeMove(server: McpServer, store: GameStore, showsBoard
   };
   const handler = ({ gameId, ply, move }: z.infer<typeof input>) =>
     handle(store, gameId, async () =>
-      gameResult(await changeGame(store, gameId, ply, (game) => applyMove(game, move, 'llm'))),
+      gameResult(
+        await changeGame(store, gameId, ply, (game) =>
+          playJevReply(applyMove(game, move, 'llm'), jev),
+        ),
+      ),
     );
 
-  if (showsBoard) registerAppTool(server, 'make_move', { ...config, _meta: SHOWS_BOARD }, handler);
+  if (movesShowBoard)
+    registerAppTool(server, 'make_move', { ...config, _meta: SHOWS_BOARD }, handler);
   else server.registerTool('make_move', config, handler);
 }

@@ -3,10 +3,9 @@ import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { SHOWS_BOARD } from '../board-ui.ts';
-import type { GameStore } from '../store/store.ts';
-import { gameIdInput, gameResult, handle, loadGame } from './common.ts';
+import { gameIdInput, gameResult, handle, loadGame, type ToolDeps } from './common.ts';
 
-export function registerGetGame(server: McpServer, store: GameStore) {
+export function registerGetGame(server: McpServer, { store }: ToolDeps) {
   registerAppTool(
     server,
     'get_game',

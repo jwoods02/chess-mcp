@@ -48,6 +48,9 @@ pnpm format         # oxfmt (format:check in CI)
 pnpm build          # builds the board UI
 ```
 
+Config lives in `apps/server/.env` (copy `.env.example`). Setting `TYPESAFE_AI_API_KEY` enables Jev as an
+opponent; without it the server runs fine and simply doesn't offer Jev.
+
 Before finishing a change, run `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`.
 
 ## Conventions

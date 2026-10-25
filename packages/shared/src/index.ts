@@ -4,8 +4,8 @@ import { z } from 'zod';
 export const Color = z.enum(['w', 'b']);
 export type Color = z.infer<typeof Color>;
 
-/** Who controls a side of the board. */
-export const Player = z.enum(['human', 'llm']);
+/** Who controls a side of the board. `jev` is TypeSafe AI's decision model, run by the server. */
+export const Player = z.enum(['human', 'llm', 'jev']);
 export type Player = z.infer<typeof Player>;
 
 export const Result = z.enum(['1-0', '0-1', '1/2-1/2']);
@@ -41,7 +41,25 @@ export const GameView = z.object({
   termination: Termination.optional(),
   inCheck: z.boolean(),
   drawOffer: Color.optional().describe('Side with a pending draw offer'),
-  lastMove: z.object({ san: z.string(), from: z.string(), to: z.string(), by: Player }).optional(),
+  lastMove: z
+    .object({
+      san: z.string(),
+      from: z.string(),
+      to: z.string(),
+      by: Player,
+      jev: z
+        .object({
+          topMoves: z
+            .record(z.string(), z.number())
+            .describe("Jev's most likely moves (probability)"),
+          fallback: z
+            .string()
+            .optional()
+            .describe('Set when Jev failed and a random move was played'),
+        })
+        .optional(),
+    })
+    .optional(),
   orientation: Color.describe("Board orientation: the human's colour"),
 });
 export type GameView = z.infer<typeof GameView>;

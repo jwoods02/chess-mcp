@@ -18,7 +18,8 @@ const LIVE =
   document.querySelector<HTMLMetaElement>('meta[name="chess-board-mode"]')?.content === 'live';
 const POLL_MS = 1500;
 // How long to wait for the host to run a tool call before posting the move as a message instead.
-const SEND_TIMEOUT_MS = 5000;
+// Longer than the server's worst case against Jev (two 2.5s attempts, then a random move).
+const SEND_TIMEOUT_MS = 8000;
 
 // Host theme variables, falling back to the system colours for hosts that don't set them.
 const MAIN: CSSProperties = {
@@ -36,7 +37,7 @@ const IN_CHECK: CSSProperties = {
 function App() {
   const [view, setView] = useState<GameView>();
   // Shows a dropped piece on its new square while the server checks the move.
-  const [pending, setPending] = useState<PositionDataType>();
+  const [dropped, setDropped] = useState<{ ply: number; position: PositionDataType }>();
   const [promotion, setPromotion] = useState<{ from: string; to: string }>();
   const [notice, setNotice] = useState<string>();
 
@@ -56,6 +57,11 @@ function App() {
   if (error) return <p>Could not connect to the host: {error.message}</p>;
   if (!view || !app) return <p>Loading game…</p>;
 
+  // A dropped piece is shown on its new square until the server answers. It only applies to the
+  // position it was dropped on, so any newer position (a reply, or a poll in live mode) replaces it.
+  const pending = dropped?.ply === view.ply ? dropped.position : undefined;
+  const setPending = (position: PositionDataType | undefined) =>
+    setDropped(position && { ply: view.ply, position });
   const humansTurn = view.status === 'active' && view.toMove === 'human' && !pending;
 
   /**
@@ -69,13 +75,15 @@ function App() {
     const result = await app
       .callServerTool(
         {
-          name: 'submit_human_move',
+          // Games against Jev have their own tool, which also plays Jev's reply.
+          name:
+            view.white === 'jev' || view.black === 'jev' ? 'play_against_jev' : 'submit_human_move',
           arguments: { gameId: view.gameId, ply: view.ply, move: move.uci },
         },
         { timeout: SEND_TIMEOUT_MS },
       )
       .catch((error: unknown) => {
-        console.error('submit_human_move failed, posting the move instead', error);
+        console.error('Sending the move failed, posting it instead', error);
         return undefined;
       });
     if (result) return showSubmitted(app, result);
