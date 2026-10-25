@@ -37,9 +37,11 @@ The foundation: a human and an agent can play a complete, legal game of chess ov
 - **Moving on the board (built):** drag your pieces on your turn, with a promotion picker. The move
   goes straight to the server and the assistant is told, so it replies (see
   [architecture § MCP App](../architecture.md#mcp-app-board-ui)).
-- **Live board experiment (built, behind `BOARD_MODE=live`):** one board per game that updates in place
-  for your moves and the assistant's replies. Compare it with the default board-per-round.
-- **Later:** click-to-move and legal-move dots, and a floating (picture-in-picture) live board.
+- **Live board experiment (removed):** one board per game that updated in place by polling the server.
+  It added a hidden tool, polling and a second code path through every move tool, so we dropped it
+  in favour of one board per round (see [moving pieces on the board](../mcp-apps-hosts.md)).
+- **Later:** click-to-move and legal-move dots, and a setup screen for starting a new game (opponent,
+  colour, coaching mode, opponent strength).
 
 ## M3 — Opponents: Jev (play built; coaching next)
 
@@ -50,8 +52,9 @@ Add a non-LLM AI opponent so that the LLM can _coach_ instead of _play_.
   against Jev gets an instant reply on every host.
 - Jev returns a probability for each legal move. We keep that distribution: it is a strong coaching
   signal ("Jev's intuition gave your move 2%; it favoured Nxe5 at 41%").
-- Strength control by sampling from Jev's distribution with a temperature, rather than always taking
-  the top move.
+- Strength and style control, for example sampling from Jev's top moves rather than always taking the
+  best one. These are experiments, listed under
+  [opponent settings](./coaching-modes.md#opponent-settings-later-experiments).
 - Modes: **human vs Jev with the LLM as coach** and LLM vs Jev (built). Jev vs Jev needs a stepping tool
   (later). Coaching while you play Jev is the next design question.
 

@@ -30,7 +30,7 @@ another store is coming) and the opponent interface (Jev, then possibly others).
   Host/Origin checks and body parsing) and a web-standard `createMcpHandler(...).fetch`. That is the
   best first-party support of any framework.
 - **TS 7** has no stable compiler API until 7.1, so we avoid tools that depend on it. Plain `tsc` is fine.
-- **Oxfmt** is pre-1.0, so we pin its version.
+- **Oxfmt** is pre-1.0, so the catalog keeps it on one minor version (`^0.74.0`).
 
 ## Repo layout
 
@@ -48,9 +48,8 @@ chess-mcp/
 │        │  └─ text.ts        # ASCII board + text tool response
 │        ├─ store/
 │        │  ├─ store.ts       # GameStore interface
-│        │  ├─ sqlite.ts      # better-sqlite3 implementation
-│        │  └─ memory.ts      # in-memory implementation (tests)
-│        ├─ opponents/        # M3: Jev
+│        │  └─ sqlite.ts      # better-sqlite3 implementation (tests use `:memory:`)
+│        ├─ opponents/        # Jev
 │        └─ coaching/         # M5: coaching modes
 ├─ packages/
 │  ├─ board-app/              # MCP App UI → builds to dist/index.html
@@ -65,7 +64,6 @@ chess-mcp/
 ```bash
 pnpm install
 pnpm dev          # builds the board UI in watch mode + runs the server on http://localhost:3000/mcp
-pnpm dev:live     # the same, with the live board experiment (BOARD_MODE=live)
 ```
 
 - SQLite file at `apps/server/data/chess.db` (created on first run; override with `DATABASE_PATH`).
@@ -95,7 +93,7 @@ model and the board UI can each pick up any game with any request.
 
 ```ts
 type Color = 'w' | 'b';
-type Player = 'human' | 'llm' | 'jev'; // who controls a seat; 'jev' arrives in M3
+type Player = 'human' | 'llm' | 'jev'; // who controls a seat
 
 interface Game {
   id: string; // crypto.randomUUID()
@@ -124,7 +122,6 @@ interface Move {
   uci: string; // 'g1f3'
   by: Player; // who moved; the tool passes it and it must match the seat to move
   meta?: { probabilities?: Record<string, number>; fallback?: string; latencyMs?: number }; // Jev's moves
-  meta?: Record<string, unknown>; // e.g. Jev's move probabilities (M3)
 }
 ```
 
@@ -137,10 +134,13 @@ repetition, and it's trivially cheap. The current FEN is derived, not stored.
 - `createGame({ white, black, startFen? }) → Game`
 - `applyMove(game, input, by) → Game`: plays a move for the side to move, which must be controlled by
   `by` (otherwise `not_your_turn`). It accepts SAN (`Nf3`), UCI
-  (`g1f3`, `e7e8q`) and loose forms (`nf3`, `0-0`). Promotions must name the piece. It throws a
+  (`g1f3`, `e7e8q`) and loose forms (`nf3`, `0-0`). A lowercase `bx…` is always a pawn capture, never
+  a bishop move. Promotions must name the piece. It throws a
   `ChessError` with a `code` on anything illegal, and sets status/result/termination when the game
   ends. Threefold repetition and the 50-move rule end the game automatically, as chess.js does.
-- `undo(game, plies)`, `resign(game, color)`, `draw(game, action, color)`
+- `undo(game, plies)`: against Jev it stops on the other player's turn (one ply short, or one
+  further for a single ply), because stopping on Jev's turn would only make Jev move again.
+- `resign(game, color)`, `draw(game, action, color)`
 - `toView(game) → GameView`
 
 ### Draw offers
@@ -292,7 +292,7 @@ ASCII letters (more reliable for models than Unicode glyphs), flipped when the h
 | `submit_human_move` | `{ gameId, ply, move }`                                            | –               | Relays a move the **human** made, in games not against Jev.                  |
 | `play_against_jev`  | `{ gameId, ply, move }`                                            | ✅              | The human's move against Jev; Jev replies in the same call. Only with a key. |
 | `legal_moves`       | `{ gameId, square? }`                                              | –               | SAN list, optionally for one piece.                                          |
-| `undo_move`         | `{ gameId, ply, plies?: number }`                                  | ✅              | Default 2 (back to the human's turn).                                        |
+| `undo_move`         | `{ gameId, ply, plies?: number }`                                  | ✅              | Default 2 (back to the human's turn). Never stops on Jev's turn.             |
 | `resign_game`       | `{ gameId, ply, color }`                                           | –               | `color` = the side resigning.                                                |
 | `draw_offer`        | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | –               | `color` = the side acting. See [Draw offers](#draw-offers).                  |
 
@@ -320,18 +320,21 @@ is fixed in the tool list, not chosen per call. So the rule is set per tool:
 - The server enforces which move tool applies (`not_your_turn` for the wrong side, `wrong_tool` for
   the wrong kind of game), and the error names the right tool, so the model corrects itself.
 
-How this holds up for later modes, compared with the [live board](#mcp-app-board-ui) stretch goal:
+How this holds up for later modes:
 
-| Scenario                             | Per-round board (now)                                          | Live board (stretch)                                    |
-| ------------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------- |
-| Human vs assistant                   | One board per round                                            | One board per game                                      |
-| Human delivers mate / human vs human | Model calls `get_game` when prompted                           | Board updates in place                                  |
-| Human vs Jev (M3)                    | `play_against_jev` shows the board with Jev's reply            | Drag, Jev replies in the same call, no model round trip |
-| Coaching: question before your move  | Board and question arrive together                             | Works; the board may have scrolled out of view          |
-| Coaching: hints with arrows          | Needs a "show board with arrows" tool (fresh board)            | Arrows stored on the game; the live board picks them up |
-| Coaching: post-game review           | Needs a "show board at ply N" tool                             | Same need; the board steps through in place             |
-| Puzzles (M4)                         | `submit_puzzle_move` text-only; `get_puzzle` on a new position | Wrong drag snaps back instantly; model coaches in chat  |
-| Text-only clients                    | Unaffected: every result has the full text board               | Unaffected                                              |
+| Scenario                             | Per-round board                                                |
+| ------------------------------------ | -------------------------------------------------------------- |
+| Human vs assistant                   | One board per round                                            |
+| Human delivers mate / human vs human | Model calls `get_game` when prompted                           |
+| Human vs Jev                         | `play_against_jev` shows the board with Jev's reply            |
+| Coaching: question before your move  | Board and question arrive together                             |
+| Coaching: hints with arrows          | Needs a "show board with arrows" tool (fresh board)            |
+| Coaching: post-game review           | Needs a "show board at ply N" tool                             |
+| Puzzles (M4)                         | `submit_puzzle_move` text-only; `get_puzzle` on a new position |
+| Text-only clients                    | Unaffected: every result has the full text board               |
+
+A live board (one per game, updated in place by polling) was tried and removed: it doubled the paths
+through every move tool. See [moving pieces on the board](./mcp-apps-hosts.md).
 
 ### Error codes
 
@@ -392,28 +395,13 @@ App connects → ontoolresult(result) → render(result.structuredContent as Gam
      square straight away while the server checks it.
   2. A pawn dropped on the last rank opens a promotion picker (queen, rook, bishop, knight).
   3. The app calls `submit_human_move` (or `play_against_jev` in a Jev game) itself and re-renders from the returned view. If the move is
-     illegal or stale, the board goes back to the server's position and says why.
+     illegal or stale, the board goes back to the server's position and says why in plain words
+     (a stale move usually means a drag on an older board further up the chat).
   4. The model didn't see that call, so the app tells it: `updateModelContext` with the full result
      text, then, if the assistant is next, `sendMessage("I played e4.")` so it replies with
      `make_move`. If the host refuses the message, the board asks the human to tell the assistant.
   5. Server instructions tell the model a board move is already submitted, so it replies rather than
      submitting it again.
-- **Board modes** (`BOARD_MODE`, default `per-round`; `pnpm dev:live` runs `live`):
-
-  |                          | `per-round` (default)                         | `live` (experiment)                               |
-  | ------------------------ | --------------------------------------------- | ------------------------------------------------- |
-  | Boards in the chat       | One per round (drawn by the assistant's move) | One per game (drawn by `new_game` / `get_game`)   |
-  | `make_move`, `undo_move` | Draw a board                                  | Text only                                         |
-  | Assistant's reply        | Arrives on a new board                        | The existing board polls `board_state` every 1.5s |
-  | Moves typed in chat      | Next board shows them                         | Picked up by polling                              |
-  - `board_state` is an app-only tool (`visibility: ['app']`), so the model never sees it.
-  - The server tells the board its mode with a `<meta name="chess-board-mode">` tag added when it
-    serves the HTML. The board only polls in live mode, and only while the game is active.
-  - Why polling: MCP Apps only sends a board the results of tool calls that board caused, and the
-    server is stateless, so an existing board can't be told about the assistant's move. If live mode
-    wins, switch to long-polling (`board_state` waits for the ply to change) before hosting.
-  - Not built yet: `pip` display mode, so a live board floats while the chat scrolls.
-
 - **Host differences:** hosts vary in whether they forward a board's tool calls and whether they send
   or only draft its chat messages. The board tries each path and falls back. See
   [Moving pieces on the board](./mcp-apps-hosts.md) for what Claude and ChatGPT do and why.
@@ -425,9 +413,10 @@ App connects → ontoolresult(result) → render(result.structuredContent as Gam
 ```ts
 // opponents/opponent.ts
 interface Opponent {
-  chooseMove(position: { fen: string; history: string[]; legalMoves: string[] }): Promise<{
+  // `moves` is the game so far in numbered notation ("1. e4 e5 2. Nf3"); `legalMoves` is SAN.
+  chooseMove(position: { fen: string; moves: string; legalMoves: string[] }): Promise<{
     move: string;
-    meta?: Record<string, unknown>;
+    meta?: MoveMeta;
   }>;
 }
 ```
@@ -442,8 +431,8 @@ interface Opponent {
   why in the move's `meta`, so the game never gets stuck. The result text says when this happened.
 - **Draws and resigning:** nobody can resign or answer a draw offer for Jev's side (`invalid_players`),
   and offering Jev a draw is declined ("Jev doesn't accept draws: play on or resign").
-- **Known gaps:** if the server restarts without a key, existing Jev games wait for a Jev that isn't
-  there (the status says so). Undo landing on Jev's turn makes Jev move again, often the same move.
+- **Known gap:** if the server restarts without a key, existing Jev games wait for a Jev that isn't
+  there (the status says so).
 - **One Jev seat per game.** Jev only replies to someone else's move, so Jev vs Jev would never progress
   (`invalid_players`). Watching Jev play itself needs a stepping tool, which is a later addition.
 
@@ -470,7 +459,8 @@ TypeSafe's System One API directly. Using the AI SDK keeps the door open to othe
 - **Live results (2026-10-25):** 135–300ms per move. It plays human-like openings (1.e4 at 81% from the
   start), takes a hanging queen (63%) and finds a mate in one (69%). Third-party benchmarks still show
   it losing to Stockfish's weakest level, so expect a beginner-to-club sparring partner.
-- **Not built yet:** strength control by sampling from the distribution with a temperature.
+- **Not built yet:** strength and style control. See
+  [Opponent settings](./product/coaching-modes.md#opponent-settings-later-experiments).
 - **Tests** use the AI SDK's `Experimental_DecisionMockModelV4` (`opponents/mock-jev.ts`), so they make no
   network calls.
 
@@ -510,18 +500,18 @@ interface CoachingBlock {
 
 - `chess/game.ts`: move parsing, every way a game can end, special moves (castling, en passant,
   promotion) and undo.
-- `store`: one small test file run against both `memory` and `sqlite`.
+- `store`: one small test file against SQLite in memory (`:memory:`). Server tests use the same.
 - Server: an in-process test that drives `app.request('/mcp', …)` through a full scripted game.
 - Jev (M3): the AI SDK's mock decision model (`opponents/mock-jev.ts`) and small stub opponents for
   failures, illegal answers and a slow reply racing a resignation. No network in tests.
 
 ## Tooling
 
-- Root scripts: `pnpm dev | dev:live | build | typecheck | test | lint | format | inspect`.
+- Root scripts: `pnpm dev | build | typecheck | test | lint | format | inspect`.
 - Each package has its own `tsconfig.json` (`strict`, `verbatimModuleSyntax`, `erasableSyntaxOnly`,
   `allowImportingTsExtensions`, `noEmit`). Source imports use `.ts` and run directly in Node; `tsc` only
   typechecks.
-- Env (`PORT`, `DATABASE_PATH`, `BOARD_MODE`, `TYPESAFE_AI_API_KEY`, `JEV_MODEL`) is read once in
+- Env (`PORT`, `DATABASE_PATH`, `TYPESAFE_AI_API_KEY`, `JEV_MODEL`) is read once in
   `index.ts`, loaded from `apps/server/.env` by Node's `--env-file-if-exists`.
 
 ## Decisions

@@ -40,6 +40,24 @@ Modes can be selected at game creation and **switched mid-game** (`set_coaching_
 - (Later) MCP **prompts** are exposed for each mode ("Start a Socratic coaching game"), so users can pick a
   mode from their client's prompt menu.
 
+## Opponent settings (later experiments)
+
+Coaching modes decide how much advice the human gets. A separate setting decides how the opponent
+plays, so the two can be combined freely ("blunder check against a weak Jev"). We expect to try
+several ideas here, so treat each one like a mode: a named, versioned setting recorded on the game
+(for example `jev-top5@1`), chosen at game creation, and easy to add or drop.
+
+| Idea                     | Opponent | How                                                                                                      |
+| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------- |
+| Pick among the top moves | Jev      | Choose at random between Jev's 1st and Nth most likely move, instead of always the top one.              |
+| Temperature              | Jev      | Sample from Jev's whole distribution, sharpened or flattened. Low = strongest, high = looser and wilder. |
+| "Play like a 1200"       | Jev      | Pass a target rating in Jev's state or question, and see whether its choices change.                     |
+| "Play like a 1200"       | LLM      | Tell the assistant the rating to play at and the kind of mistakes that player makes.                     |
+| Engine skill level       | Engine   | When an analysis engine (Stockfish) arrives, use its built-in skill levels as a calibrated baseline.     |
+
+What to watch when trying them: whether the human keeps playing, how often they win, and whether the
+opponent's mistakes feel human (a missed tactic) rather than random (a hung queen for no reason).
+
 ## Open questions
 
 - Should a mode be able to _block_ a move (for example "are you sure?" confirmation in `blunder_check`)

@@ -40,13 +40,12 @@ assistant's own move, draws the board showing both moves. Resigning and draw off
 unchanged position. When a human move does leave a position nobody has seen (a checkmate on the
 human's move, or a human-vs-human game), the tool result tells the model to call `get_game`.
 
-There is also an experimental live mode (`BOARD_MODE=live`, run with `pnpm dev:live`). In it, only
-`new_game` and `get_game` draw a board, and that one board stays up to date for the whole game. It has
-to poll for updates. A board only ever hears about tool calls it made itself, plus the result of the
-call that drew it. When the model later calls `make_move`, the existing board is not told, and our
-stateless server has no way to push to it. So a live board asks the server every 1.5 seconds through
-`board_state`, a tool marked `visibility: ["app"]` so the model never sees it. If live mode wins out,
-long-polling (where `board_state` waits until the game changes) would cut the traffic.
+We also tried a live mode, where one board per game stayed up to date. It had to poll for updates. A
+board only ever hears about tool calls it made itself, plus the result of the call that drew it. When
+the model later calls `make_move`, the existing board is not told, and our stateless server has no way
+to push to it. So a live board asked the server every 1.5 seconds through a tool hidden from the model.
+It worked, but it doubled the paths through every move tool, so we removed it and kept one board per
+round.
 
 ## What happened in Claude Code
 
@@ -179,7 +178,6 @@ a turn to comment, so its commentary arrives with the human's next message or a 
 | Human vs assistant, typed | Works; one board per round         | Works                                                  | Works; text board |
 | Human vs assistant, drag  | Drag, then press Enter             | Drag submits directly; the reply is probably automatic | No board          |
 | Human vs Jev (M3), drag   | Drag; Jev replies in the same call | Same                                                   | No board          |
-| Live board mode           | Updates by polling; drags as above | Same                                                   | Unaffected        |
 
 This makes a strong case for building Jev next: it's the one opponent that feels immediate on every
 host. It also makes the per-round board, together with typed moves, the dependable default, with
