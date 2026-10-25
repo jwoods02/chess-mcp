@@ -1,4 +1,11 @@
-import type { CoachingBlock, Color, GameState, GameView, MoveFacts } from '@chess-mcp/shared';
+import type {
+  CoachingBlock,
+  Color,
+  GameState,
+  GameView,
+  MoveFacts,
+  PositionFacts,
+} from '@chess-mcp/shared';
 import { personaText } from '../opponents/levels.ts';
 import { colorName, hasJev, moveText, playerName } from './game.ts';
 
@@ -71,7 +78,7 @@ function coachingLines(coaching: CoachingBlock): string[] {
   return lines;
 }
 
-function factsText(facts: MoveFacts): string {
+export function factsText(facts: MoveFacts): string {
   const parts = [facts.move];
   if (facts.captured) parts.push(`captured a ${facts.captured}`);
   for (const h of facts.hanging) {
@@ -82,6 +89,20 @@ function factsText(facts: MoveFacts): string {
   if (facts.missedWin) parts.push(`missed ${facts.missedWin.move} winning ${facts.missedWin.wins}`);
   parts.push(`material now: ${facts.material}`);
   if (facts.reply) parts.push(`then the reply ${facts.reply}`);
+  return parts.join('; ');
+}
+
+/** What the side to move can do, as one line. */
+export function positionText(facts: PositionFacts): string {
+  const parts = [`${facts.toMove} to move${facts.inCheck ? ', in check' : ''}`];
+  if (facts.mateInOne.length) parts.push(`mate in one: ${facts.mateInOne.join(', ')}`);
+  if (facts.bestCapture) {
+    parts.push(`best capture: ${facts.bestCapture.move} wins ${facts.bestCapture.wins} points`);
+  }
+  for (const h of facts.underAttack) {
+    parts.push(`${h.piece} on ${h.square} is under attack (${h.loses} points)`);
+  }
+  if (parts.length === 1) parts.push('no mate in one, winning capture or piece under attack');
   return parts.join('; ');
 }
 

@@ -83,12 +83,13 @@ A pluggable set of teaching styles that wrap any game or puzzle. We build it bef
 puzzles reuse it (`puzzle_coach`) and a new-game screen needs modes to offer. See
 [coaching-modes.md](./coaching-modes.md).
 
-- The server supplies checked facts after each move and a `preview_move` calculator; modes are mostly
+- The server supplies checked facts after each move and an `analyze_position` calculator; modes are mostly
   prompt text; the server decides when the coach speaks.
 - Step 1 (built): checked facts, `play` and `blunder_check`, the opponent level (beginner to best, for
   Jev and the LLM), and `update_game_settings`.
-- Step 2: `preview_move` and `hints`. Step 3: `post_game_review`. Step 4: `socratic`, `commentary`,
-  `plan_first`.
+- Step 2 (built): `analyze_position`, a proactive `hints` mode, and a review offer at the end of every
+  game. Next candidates: `socratic`, `commentary`, `plan_first`, each only if it changes what the coach
+  does unprompted.
 - Then a new-game setup screen (opponent, colour, coaching mode) and MCP prompts per mode.
 
 ## Later / ideas

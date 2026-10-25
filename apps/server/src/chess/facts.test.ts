@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { humanMoveFacts } from './facts.ts';
+import { humanMoveFacts, positionFacts } from './facts.ts';
 import { applyMove, createGame, toState, type Game } from './game.ts';
 
 /** Plays moves for whoever's turn it is. */
@@ -59,4 +59,16 @@ test("a pinned attacker doesn't make a piece hang", () => {
 test("facts follow the human's move through the opponent's reply, then stop", () => {
   expect(humanMoveFacts(play('e4', 'e5'))?.move).toBe('e4');
   expect(humanMoveFacts(createGame({ white: 'llm', black: 'human' }))).toBeUndefined();
+});
+
+test('position facts: mates, the best capture and pieces under attack for the side to move', () => {
+  expect(positionFacts(play(...MATE_ON_H7)).mateInOne).toEqual(['Qxh7#']);
+  expect(positionFacts(play('e4', 'e5', 'Nf3', 'Qg5')).bestCapture).toEqual({
+    move: 'Nxg5',
+    wins: 9,
+  });
+  expect(positionFacts(play('e4', 'd5'))).toMatchObject({
+    toMove: 'White',
+    underAttack: [{ piece: 'pawn', square: 'e4', loses: 1 }],
+  });
 });

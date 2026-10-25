@@ -122,6 +122,22 @@ export function applyMove(game: Game, input: string, by: Player, meta?: MoveMeta
 }
 
 /**
+ * A scratch copy of the game with `moves` played for whoever is to move, for looking ahead. The stored
+ * game doesn't change, and seats aren't checked. Throws `illegal_move` like applyMove.
+ */
+export function previewLine(game: Game, moves: string[]): Game {
+  const chess = replay(game);
+  const played: Move[] = [];
+  for (const input of moves) {
+    const mover = chess.turn();
+    const move = tryMove(chess, input.trim());
+    if (!move) throw new ChessError('illegal_move', illegalMoveMessage(chess, input.trim()));
+    played.push({ san: move.san, uci: move.lan, by: seat(game, mover) });
+  }
+  return { ...game, moves: [...game.moves, ...played] };
+}
+
+/**
  * Takes back up to `plies` half-moves (fewer if the game is shorter). Reopens a finished game.
  * Against Jev it stops on the other player's turn, since stopping on Jev's would only make Jev move
  * again: one ply short, or one further when taking back a single ply.

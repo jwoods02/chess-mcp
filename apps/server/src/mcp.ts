@@ -1,6 +1,7 @@
 import { EXTENSION_ID, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer } from '@modelcontextprotocol/server';
 import { registerBoardUi } from './board-ui.ts';
+import { registerAnalyzePosition } from './tools/analyze-position.ts';
 import type { Opponent } from './opponents/opponent.ts';
 import type { GameStore } from './store/store.ts';
 import type { ToolDeps } from './tools/common.ts';
@@ -21,7 +22,7 @@ const INSTRUCTIONS = [
   'When the user makes a move and you play the other side, relay their move and play your reply in the same turn. Then answer the way a friend across the board would: your move, and a short comment if there is one worth making.',
   'The user can also move by dragging pieces on the inline board. When the board could submit the move itself, your context says it is already submitted, so reply with make_move. Otherwise the board posts the move as a chat message; submit it like a typed move.',
   "When a game result has no `board` field, the user sees the board inline in the chat, so keep the board, FEN, moves and ply out of your reply and talk about the game instead. When it has one, they don't see a board: include it in your reply.",
-  'Each game result has a next step and a coaching block. Together they say how to coach in this game and, when you play, at what level; follow the ones in the latest result, since the human can change them. Base any claim about the position, such as a hanging piece or a missed mate, on coaching.facts: they are checked, while a board read by eye is easy to get wrong.',
+  'Each game result has a next step and a coaching block. Together they say how to coach in this game and, when you play, at what level; follow the ones in the latest result, since the human can change them. Base any claim about the position, such as a hanging piece or a missed mate, on coaching.facts or analyze_position: they are checked, while a board read by eye is easy to get wrong.',
 ];
 
 const JEV_INSTRUCTIONS =
@@ -54,6 +55,7 @@ export function buildMcpServer({ store, jev }: ServerOptions) {
   registerSubmitHumanMove(server, deps);
   if (jev) registerPlayAgainstJev(server, deps);
   registerLegalMoves(server, deps);
+  registerAnalyzePosition(server, deps);
   registerUndoMove(server, deps);
   registerResignGame(server, deps);
   registerDrawOffer(server, deps);

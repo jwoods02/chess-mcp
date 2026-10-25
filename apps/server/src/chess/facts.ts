@@ -1,4 +1,4 @@
-import type { MoveFacts } from '@chess-mcp/shared';
+import type { MoveFacts, PositionFacts } from '@chess-mcp/shared';
 import { Chess, type Square } from 'chess.js';
 import { replay, type Game } from './game.ts';
 
@@ -53,6 +53,29 @@ export function moveFacts(game: Game, index: number): MoveFacts {
     material: materialText(material(chess)),
     ...(reply && { reply }),
   };
+}
+
+/** What the side to move can do now: mates in one, its best capture, and its pieces under attack. */
+export function positionFacts(game: Game): PositionFacts {
+  const chess = replay(game);
+  const side = chess.turn();
+  const best = bestCapture(chess);
+  return {
+    toMove: side === 'w' ? 'White' : 'Black',
+    inCheck: chess.inCheck(),
+    mateInOne: mates(chess),
+    ...(best && { bestCapture: best }),
+    // In check there's no passing the move to ask what the opponent could take.
+    underAttack: chess.inCheck() ? [] : hangingPieces(passTurn(chess), side),
+  };
+}
+
+/** The same position with the other side to move, to ask what it could take. */
+function passTurn(chess: Chess): Chess {
+  const fields = chess.fen().split(' ');
+  fields[1] = fields[1] === 'w' ? 'b' : 'w';
+  fields[3] = '-';
+  return new Chess(fields.join(' '), { skipValidation: true });
 }
 
 /**

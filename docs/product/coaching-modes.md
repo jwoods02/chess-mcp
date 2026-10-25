@@ -87,8 +87,9 @@ Facts are computed with chess.js after each move, for both sides:
 - Against Jev: how likely Jev rated the human's move, and its own top choice. This is "what a typical
   player would do", not the truth.
 
-The calculator is a tool, `preview_move`: it plays a move or a short line on a scratch board, without
-changing the game, and returns the same facts. Before the LLM says "Nf3 hangs the bishop" or answers
+The calculator is a tool, `analyze_position` (built). With no moves it lists what the side to move can
+do: mates in one, the best winning capture, and its pieces under attack. With a line of moves, it plays
+them on a scratch board, without changing the game, and returns the same facts for each move. Before the LLM says "Nf3 hangs the bishop" or answers
 "why not Bc4?", it checks. Server instructions tell it to back any concrete claim this way rather than
 read the board itself.
 
@@ -116,26 +117,31 @@ generic praise.
 
 Roughly ordered by how much the coach says.
 
-| id                 | Advice     | What the coach does                                                                                       | Needs             |
-| ------------------ | ---------- | --------------------------------------------------------------------------------------------------------- | ----------------- |
-| `play`             | None       | Plays and chats. Says nothing about the position, or Jev's instinct, unless asked.                        | Prompt only       |
-| `post_game_review` | At the end | Silent during play. At the end, asks what the human was thinking at 2–3 key moments, then explains.       | Facts             |
-| `blunder_check`    | Sometimes  | Silent unless a fact matters (a dropped piece, a missed mate), then explains and offers a takeback.       | Facts, speak flag |
-| `hints`            | When asked | Hints escalate from a theme to a piece to the move. Hints used are counted.                               | `preview_move`    |
-| `socratic`         | Often      | In sharp positions, asks a checks/captures/threats question before the human moves. Never names the move. | Facts             |
-| `commentary`       | Every move | A short, friendly comment on the ideas after each move.                                                   | Prompt only       |
-| `plan_first`       | Every move | The human says their plan before each move; the coach responds to the reasoning, not just the move.       | Prompt only       |
-| `puzzle_coach`     | Puzzles    | Reacts to the human's attempt, asks for their reasoning, then nudges or confirms.                         | Puzzles (M4)      |
+| id              | Advice     | What the coach does                                                                                       | Needs         |
+| --------------- | ---------- | --------------------------------------------------------------------------------------------------------- | ------------- |
+| `play`          | None       | Plays and chats. Says nothing about the position, or Jev's instinct, unless asked.                        | Prompt only   |
+| `blunder_check` | Sometimes  | Silent unless a fact matters (a dropped piece, a missed mate), then explains and offers a takeback.       | Facts (built) |
+| `hints`         | Often      | When the human has a chance or a threat on their move, gives the first hint unprompted; more on request.  | Built         |
+| `socratic`      | Often      | In sharp positions, asks a checks/captures/threats question before the human moves. Never names the move. | Facts         |
+| `commentary`    | Every move | A short, friendly comment on the ideas after each move.                                                   | Prompt only   |
+| `plan_first`    | Every move | The human says their plan before each move; the coach responds to the reasoning, not just the move.       | Prompt only   |
+| `puzzle_coach`  | Puzzles    | Reacts to the human's attempt, asks for their reasoning, then nudges or confirms.                         | Puzzles (M4)  |
 
 Modes are chosen at game creation and can be switched mid-game (`update_game_settings`). Built so far:
-`play` and `blunder_check`.
+`play`, `blunder_check` and `hints`.
+
+**A mode has to change what the coach does unprompted.** The human can ask for help, a hint or a
+review at any point, in any mode, and the coach answers from checked facts. So "hints when asked" or
+"review when asked" aren't modes. `hints` gives the first hint before the human moves whenever they
+have a chance or a threat; and every mode, `play` included, offers a short review of the key moments
+when the game ends, rather than a separate review mode.
 
 ## Experiences that are hard to get elsewhere
 
 Chess sites have personality bots, canned coach explanations and game review. What they don't have is
 an open conversation grounded in checked facts, which can build things on request:
 
-1. **Ask anything, any time.** "Why not Bc4?" mid-game gets an answer checked with `preview_move`.
+1. **Ask anything, any time.** "Why not Bc4?" mid-game gets an answer checked with `analyze_position`.
 2. **Plan first.** The coach judges the human's reasoning (`plan_first`), which an engine can't do.
 3. **Drills on request.** "I keep losing to early queen attacks": the LLM sets up positions, the server
    checks them, and the human plays them out against Jev. Builds on puzzles (M4).
@@ -198,7 +204,7 @@ feel human (a missed tactic) rather than random (a hung queen for no reason).
 
 ## Open questions
 
-- How often will the LLM actually use `preview_move` before making a claim, and does it slow replies
+- How often will the LLM actually use `analyze_position` before making a claim, and does it slow replies
   down noticeably?
 - Does the speak flag feel right in Jev games, or does the board's chat message ("I played e4.") get in
   the way?

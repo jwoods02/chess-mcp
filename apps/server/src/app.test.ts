@@ -1,4 +1,4 @@
-import type { GameView } from '@chess-mcp/shared';
+import type { GameView, MoveFacts, PositionFacts } from '@chess-mcp/shared';
 import { Experimental_DecisionMockModelV4 as MockDecisionModel } from 'ai/test';
 import { describe, expect, test } from 'vitest';
 import { createApp } from './app.ts';
@@ -76,6 +76,7 @@ async function listTools(server: ReturnType<typeof createApp> = app) {
 test('lists the game tools, showing the board only when a human needs to see a new position', async () => {
   const tools = await listTools();
   expect(tools.names).toEqual([
+    'analyze_position',
     'draw_offer',
     'get_game',
     'legal_moves',
@@ -207,6 +208,53 @@ test('reports an unknown game', async () => {
 });
 
 describe('coaching', () => {
+  test('analyze_position checks a line without changing the game', async () => {
+    const start = await callTool('new_game', { white: 'human', black: 'llm' });
+    const { gameId } = start.structuredContent;
+    const { structuredContent: analysis } = (await callTool('analyze_position', {
+      gameId,
+      moves: ['f3', 'e5', 'g4'],
+    })) as unknown as { structuredContent: { line: MoveFacts[]; after: PositionFacts } };
+    expect(analysis.line.map((m) => m.move)).toEqual(['f3', 'e5', 'g4']);
+    expect(analysis.line[2]!.allowsMate).toEqual(['Qh4#']);
+    expect(analysis.after.mateInOne).toEqual(['Qh4#']);
+    expect((await callTool('get_game', { gameId })).structuredContent.ply).toBe(0);
+
+    const illegal = await callTool('analyze_position', { gameId, moves: ['e5'] });
+    expect(illegal.content[0]!.text).toContain('Error [illegal_move]');
+  });
+
+  test('every mode offers a review of the key moments when the game ends', async () => {
+    const start = await callTool('new_game', { white: 'human', black: 'llm' });
+    const { gameId } = start.structuredContent;
+    await callTool('submit_human_move', { gameId, ply: 0, move: 'f3' });
+    await callTool('make_move', { gameId, ply: 1, move: 'e5' });
+    await callTool('submit_human_move', { gameId, ply: 2, move: 'g4' });
+
+    const over = await callTool('make_move', { gameId, ply: 3, move: 'Qh4#' });
+    expect(over.structuredContent.coaching).toMatchObject({
+      mode: 'play@1',
+      speak: true,
+      keyMoments: [{ move: '2. g4', reason: 'allowed mate in one: Qh4#' }],
+    });
+    expect(over.structuredContent.coaching.reason).toContain('Offer to go through');
+  });
+
+  test('hints nudges the human, unprompted, when they have a chance on their move', async () => {
+    const start = await callTool('new_game', { white: 'human', black: 'llm', coaching: 'hints' });
+    const { gameId } = start.structuredContent;
+    await callTool('submit_human_move', { gameId, ply: 0, move: 'e4' });
+    const quiet = await callTool('make_move', { gameId, ply: 1, move: 'e5' });
+    expect(quiet.structuredContent.coaching.speak).toBe(false);
+
+    await callTool('submit_human_move', { gameId, ply: 2, move: 'Nf3' });
+    const chance = await callTool('make_move', { gameId, ply: 3, move: 'Qg5' });
+    expect(chance.structuredContent.coaching).toMatchObject({
+      speak: true,
+      reason: 'The human can win material: Nxg5 wins 9 points.',
+    });
+  });
+
   test('blunder check stays quiet until a move matters, then says why with checked facts', async () => {
     const start = await callTool('new_game', {
       white: 'human',

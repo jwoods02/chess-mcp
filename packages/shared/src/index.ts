@@ -74,12 +74,15 @@ export const GameState = z.object({
 });
 export type GameState = z.infer<typeof GameState>;
 
+/** A piece the opponent can win, and how many points it would lose. */
+const Hanging = z.object({ piece: z.string(), square: z.string(), loses: z.number() });
+
 /** Checked facts about one move, worked out by the server so the model doesn't read tactics itself. */
 export const MoveFacts = z.object({
   move: z.string().describe('The move, in SAN'),
   captured: z.string().optional().describe('The piece it captured'),
   hanging: z
-    .array(z.object({ piece: z.string(), square: z.string(), loses: z.number() }))
+    .array(Hanging)
     .describe(
       "The mover's pieces the opponent can now win, and how many points each loses (pawn 1, knight or bishop 3, rook 5, queen 9). Even trades aren't listed.",
     ),
@@ -100,6 +103,28 @@ export const MoveFacts = z.object({
 });
 export type MoveFacts = z.infer<typeof MoveFacts>;
 
+/** Checked facts about a position, for the side to move: what it can do and what's under attack. */
+export const PositionFacts = z.object({
+  toMove: z.enum(['White', 'Black']),
+  inCheck: z.boolean(),
+  mateInOne: z.array(z.string()).describe('Mates in one for the side to move'),
+  bestCapture: z
+    .object({ move: z.string(), wins: z.number() })
+    .optional()
+    .describe('The capture that wins the most points, if any wins material'),
+  underAttack: z
+    .array(Hanging)
+    .describe("The side to move's pieces the opponent could win if it were its move"),
+});
+export type PositionFacts = z.infer<typeof PositionFacts>;
+
+/** A moment worth reviewing after the game. */
+export const KeyMoment = z.object({
+  move: z.string().describe('The move with its number, e.g. "10. Nc3"'),
+  reason: z.string(),
+});
+export type KeyMoment = z.infer<typeof KeyMoment>;
+
 /** How to coach right now: a one-line summary always, full guidance only at key moments. */
 export const CoachingBlock = z.object({
   mode: z.string(),
@@ -108,6 +133,10 @@ export const CoachingBlock = z.object({
   speak: z.boolean().describe('The coach has something to say now'),
   reason: z.string().optional().describe('What to speak about, when speak is true'),
   facts: MoveFacts.optional().describe("Facts about the human's move this round"),
+  keyMoments: z
+    .array(KeyMoment)
+    .optional()
+    .describe("At the end of the game, the human's moves most worth reviewing"),
 });
 export type CoachingBlock = z.infer<typeof CoachingBlock>;
 
