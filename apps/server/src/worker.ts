@@ -1,6 +1,8 @@
 import { createTypeSafeAi } from '@ai-sdk/typesafe-ai';
 // Wrangler bundles .html imports as text (see html.d.ts). Run `pnpm build` first so it exists.
-import boardHtml from '@chess-mcp/board-app/index.html';
+// A relative path, because Wrangler ignores the package's `exports` for text modules: the package
+// specifier bundled board-app's Vite source page instead of the build.
+import boardHtml from '../../../packages/board-app/dist/index.html';
 import { createApp } from './app.ts';
 import { createJev } from './opponents/jev.ts';
 import { D1Store, type D1Database } from './store/d1.ts';
