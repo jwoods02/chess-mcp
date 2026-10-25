@@ -1,13 +1,14 @@
 import type { GameSetup, GameView, MoveFacts, PositionFacts } from '@chess-mcp/shared';
 import { describe, expect, test } from 'vitest';
 import { createApp } from './app.ts';
+import { readBoardHtml } from './board-html.ts';
 import { BOARD_URI } from './board-ui.ts';
 import { createJev } from './opponents/jev.ts';
 import type { Opponent } from './opponents/opponent.ts';
 import { mockJevModel } from './opponents/mock-jev.ts';
 import { SqliteStore } from './store/sqlite.ts';
 
-const app = createApp({ store: new SqliteStore(':memory:') });
+const app = createApp({ store: new SqliteStore(':memory:'), boardHtml: readBoardHtml });
 
 async function rpc(
   method: string,
@@ -36,6 +37,17 @@ async function callTool(name: string, args: object, server: ReturnType<typeof cr
 test('GET /health', async () => {
   const res = await app.request('/health', { headers: { host: 'localhost:3000' } });
   expect(await res.json()).toEqual({ status: 'ok' });
+});
+
+test('a hosted server answers only on its public hostname', async () => {
+  const hosted = createApp({
+    store: new SqliteStore(':memory:'),
+    boardHtml: readBoardHtml,
+    host: 'chess.example.com',
+  });
+  const health = (host: string) => hosted.request('/health', { headers: { host } });
+  expect((await health('chess.example.com')).status).toBe(200);
+  expect((await health('localhost:3000')).status).toBe(403);
 });
 
 test('serves the board UI as an MCP App resource', async () => {
@@ -408,7 +420,11 @@ describe('coaching', () => {
 
 describe('playing Jev', () => {
   const withJev = (pick?: string) =>
-    createApp({ store: new SqliteStore(':memory:'), jev: createJev(mockJevModel(pick)) });
+    createApp({
+      store: new SqliteStore(':memory:'),
+      jev: createJev(mockJevModel(pick)),
+      boardHtml: readBoardHtml,
+    });
 
   test('Jev is only offered when the server has a TypeSafe key', async () => {
     const seats = async (server: ReturnType<typeof createApp>) => {
@@ -499,7 +515,11 @@ describe('playing Jev', () => {
   test('a resignation while Jev is thinking is not overwritten', async () => {
     let answer: (move: { move: string }) => void = () => {};
     const slow: Opponent = { chooseMove: () => new Promise((resolve) => (answer = resolve)) };
-    const server = createApp({ store: new SqliteStore(':memory:'), jev: slow });
+    const server = createApp({
+      store: new SqliteStore(':memory:'),
+      jev: slow,
+      boardHtml: readBoardHtml,
+    });
     const start = await callTool('new_game', { white: 'human', black: 'jev' }, server);
     const { gameId } = start.structuredContent;
 

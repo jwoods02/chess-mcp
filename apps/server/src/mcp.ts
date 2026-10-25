@@ -34,9 +34,11 @@ export interface ServerOptions {
   store: GameStore;
   /** Present only when a TypeSafe API key is configured. */
   jev?: Opponent;
+  /** The board UI's HTML (see board-ui.ts). */
+  boardHtml: () => string;
 }
 
-export function buildMcpServer({ store, jev }: ServerOptions) {
+export function buildMcpServer({ store, jev, boardHtml }: ServerOptions) {
   const instructions = [...INSTRUCTIONS, ...(jev ? [JEV_INSTRUCTIONS] : [])].join('\n');
   const server = new McpServer(
     { name: 'chess-mcp', version: '0.0.0' },
@@ -50,7 +52,7 @@ export function buildMcpServer({ store, jev }: ServerOptions) {
 
   const deps: ToolDeps = { store, jev };
 
-  registerBoardUi(server);
+  registerBoardUi(server, boardHtml);
   registerShowGameSetup(server, deps);
   registerNewGame(server, deps);
   registerGetGame(server, deps);

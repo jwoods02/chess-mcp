@@ -50,4 +50,4 @@ _different kind_ of AI (Jev), or an LLM building a puzzle and then coaching the 
 - Engine-perfect analysis as the headline feature. A classical engine may arrive later as an
   _analysis provider_, but coaching quality matters more than centipawn accuracy.
 - User accounts and auth. Games are identified only by server-generated UUIDs.
-- Deployment. It runs locally for now.
+- Running our own infrastructure. The hosted server is a single Cloudflare Worker with D1.

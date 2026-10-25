@@ -102,4 +102,4 @@ puzzles reuse it (`puzzle_coach`) and a new-game screen needs modes to offer. Se
 - Opening trainer: drill a repertoire, with the LLM explaining the ideas.
 - Progress tracking per human: recurring mistakes and themes they struggle with.
 - Homepage / web app package (`apps/web`) for landing, docs and possibly a game viewer.
-- Swap storage to Redis or Postgres, and deploy.
+- Swap storage to Redis or Postgres if D1 stops being enough.

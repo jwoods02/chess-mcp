@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import {
   getUiCapability,
   registerAppResource,
@@ -27,19 +25,15 @@ export function clientShowsBoard(server: McpServer): boolean {
   return ui?.mimeTypes?.includes(RESOURCE_MIME_TYPE) ?? false;
 }
 
-// Single-file build of packages/board-app. Read on each request so `pnpm dev` picks up rebuilds.
-const boardHtmlPath = fileURLToPath(import.meta.resolve('@chess-mcp/board-app/index.html'));
-
-export function registerBoardUi(server: McpServer) {
+/** `boardHtml` returns the single-file build of packages/board-app; each runtime loads it its own way. */
+export function registerBoardUi(server: McpServer, boardHtml: () => string) {
   registerAppResource(
     server,
     'Chess board',
     BOARD_URI,
     { mimeType: RESOURCE_MIME_TYPE },
     async () => ({
-      contents: [
-        { uri: BOARD_URI, mimeType: RESOURCE_MIME_TYPE, text: readFileSync(boardHtmlPath, 'utf8') },
-      ],
+      contents: [{ uri: BOARD_URI, mimeType: RESOURCE_MIME_TYPE, text: boardHtml() }],
     }),
   );
 }

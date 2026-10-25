@@ -26,12 +26,16 @@ If a change contradicts the docs, update the docs in the same change (or ask fir
   enhancement and never a requirement.
 - **Mutating tools require `ply`**, the caller's last-seen half-move count. If it doesn't match, return
   `stale_state`. Never apply a move against a stale view.
-- **No auth and no deploy** for now. Games are identified only by server-generated UUIDs.
+- **No auth.** Games are identified only by server-generated UUIDs. The hosted Worker rate-limits
+  each IP instead (see [Hosting](docs/architecture.md#hosting)).
+- **The repo is public.** Keep keys and account-specific IDs (Cloudflare account, D1 database) out of
+  committed files: they go in `apps/server/.env` (gitignored) or Worker secrets.
 
 ## Layout
 
 ```
-apps/server/        Hono + MCP server (tools, chess logic, storage); runs .ts directly in Node
+apps/server/        Hono + MCP server (tools, chess logic, storage); runs .ts directly in Node,
+                    or as a Cloudflare Worker (wrangler.jsonc, src/worker.ts)
 packages/board-app/ MCP App UI (React + react-chessboard) → dist/index.html (single file)
 packages/shared/    zod schemas and types shared by server and UI
 docs/               product and architecture docs
@@ -48,6 +52,8 @@ pnpm typecheck      # tsc (TypeScript 7) in every package
 pnpm lint           # oxlint (type-aware)
 pnpm format         # oxfmt (format:check in CI)
 pnpm build          # builds the board UI
+pnpm worker:dev     # the hosted Worker locally on http://localhost:8787/mcp (local D1)
+pnpm worker:deploy  # build + deploy to chess.jameswoods.co.uk (needs `wrangler login`)
 ```
 
 Config lives in `apps/server/.env` (copy `.env.example`). Setting `TYPESAFE_AI_API_KEY` enables Jev as an

@@ -7,6 +7,8 @@
     "dev": "pnpm --parallel --filter @chess-mcp/board-app --filter @chess-mcp/server dev",
     "build": "pnpm -r build",
     "start": "pnpm --filter @chess-mcp/server start",
+    "worker:dev": "pnpm build && pnpm --filter @chess-mcp/server worker:dev",
+    "worker:deploy": "pnpm build && pnpm --filter @chess-mcp/server worker:deploy",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "lint": "oxlint --type-aware",

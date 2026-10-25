@@ -14,13 +14,13 @@ another store is coming) and the opponent interface (Jev, then possibly others).
 | Concern         | Choice                                                                        |
 | --------------- | ----------------------------------------------------------------------------- |
 | Language        | TypeScript **7** (native `tsc`), ESM, `strict`                                |
-| Runtime         | Node.js 24 LTS. Dev runs `.ts` directly via Node's built-in type stripping.   |
+| Runtime         | Node.js 24 LTS locally (runs `.ts` directly); a Cloudflare Worker when hosted |
 | HTTP            | **Hono** plus `@hono/node-server`                                             |
 | MCP             | Official SDK v2: `@modelcontextprotocol/server`, `@modelcontextprotocol/hono` |
 | MCP Apps        | `@modelcontextprotocol/ext-apps` (server helpers and the UI `App` class)      |
 | Chess rules     | `chess.js`                                                                    |
 | Schemas         | `zod` 4                                                                       |
-| Storage         | `better-sqlite3`, plain SQL, no ORM                                           |
+| Storage         | SQLite: `better-sqlite3` locally, D1 when hosted. Plain SQL, no ORM           |
 | UI              | React 19, `react-chessboard`, Vite with `vite-plugin-singlefile`              |
 | Tests           | Vitest                                                                        |
 | Lint / format   | Oxlint, Oxfmt                                                                 |
@@ -39,7 +39,8 @@ chess-mcp/
 ├─ apps/
 │  └─ server/                 # the MCP server (Hono)
 │     └─ src/
-│        ├─ index.ts          # reads env, opens the store, starts Hono
+│        ├─ index.ts          # Node entry: reads env, opens the store, starts Hono
+│        ├─ worker.ts         # Cloudflare Worker entry: D1 store, rate limit (wrangler.jsonc)
 │        ├─ app.ts            # Hono app: GET /health, ALL /mcp
 │        ├─ mcp.ts            # buildMcpServer(deps): registers tools + the board UI resource
 │        ├─ tools/            # one file per tool
@@ -53,7 +54,8 @@ chess-mcp/
 │        │  └─ text.ts        # GameView, ASCII board and the text tool response
 │        ├─ store/
 │        │  ├─ store.ts       # GameStore interface
-│        │  └─ sqlite.ts      # better-sqlite3 implementation (tests use `:memory:`)
+│        │  ├─ sqlite.ts      # better-sqlite3 implementation (tests use `:memory:`)
+│        │  └─ d1.ts          # D1 implementation for the hosted Worker, same SQL
 │        ├─ opponents/        # Jev, and opponent levels
 │        └─ coaching/         # coaching modes: registry + one file per mode
 ├─ packages/
@@ -74,8 +76,29 @@ pnpm dev          # builds the board UI in watch mode + runs the server on http:
 - SQLite file at `apps/server/data/chess.db` (created on first run; override with `DATABASE_PATH`).
 - Connect from Claude Code with `claude mcp add --transport http chess http://localhost:3000/mcp`,
   or use the ext-apps `basic-host` example or MCP Inspector to see the board UI.
-- No deployment for now. Because it's plain Node and HTTP, deploying later means a container plus a
-  volume for the SQLite file.
+- `pnpm worker:dev` runs the hosted Worker locally on http://localhost:8787/mcp, with a local D1.
+
+## Hosting
+
+The public server is a Cloudflare Worker at `https://chess.jameswoods.co.uk/mcp`
+(`apps/server/wrangler.jsonc`, entry `worker.ts`). It runs the same `createApp` as Node with a
+`D1Store` in place of `SqliteStore`.
+
+- **Deploy:** `pnpm worker:deploy` builds the board UI and runs `wrangler deploy`. Wrangler bundles
+  `packages/board-app/dist/index.html` as text, so the build has to come first.
+- **No IDs in the repo.** The repo is public. The account comes from `wrangler login` (or
+  `CLOUDFLARE_ACCOUNT_ID`), and the D1 binding has no ID: Wrangler creates the database on the first
+  deploy and keeps it linked. The Jev key is a Worker secret (`wrangler secret put
+  TYPESAFE_AI_API_KEY`); `wrangler dev` reads it from `apps/server/.env`, like Node.
+- **Schema:** `D1Store` runs `CREATE TABLE IF NOT EXISTS` once per isolate, so there are no migrations
+  to apply. Add a migrations step only when the schema first changes.
+- **No auth, so a rate limit.** Every POST counts against a Workers rate-limit binding keyed by the
+  client IP (60 a minute). Over the limit the Worker answers `429` with a JSON-RPC error the model can
+  read. The limit is approximate (counted per Cloudflare location), which is enough to stop one
+  client using up the Jev credit; the credit is prepaid and doesn't top up, so the worst case is Jev
+  falling back to random moves.
+- **Host check:** `createApp({ host })` accepts only the public hostname. Off localhost the
+  DNS-rebinding check protects nothing, but it keeps the Worker from answering on other hostnames.
 
 ## Request flow
 
@@ -628,19 +651,22 @@ interface MoveFacts {
   promotion) and undo.
 - `board-app`: the plain helpers in `lib/` (history replay, the take-back rule, error wording). No
   component tests: the board is checked by hand in the MCP Inspector.
-- `store`: one small test file against SQLite in memory (`:memory:`). Server tests use the same.
+- `store`: one small test file run against both stores: SQLite in memory (`:memory:`), and D1Store
+  over a few-line fake D1 backed by the same in-memory SQLite. Server tests use SqliteStore.
 - Server: an in-process test that drives `app.request('/mcp', …)` through a full scripted game.
 - Jev (M3): the AI SDK's mock decision model (`opponents/mock-jev.ts`) and small stub opponents for
   failures, illegal answers and a slow reply racing a resignation. No network in tests.
 
 ## Tooling
 
-- Root scripts: `pnpm dev | build | typecheck | test | lint | format | inspect`.
+- Root scripts: `pnpm dev | build | typecheck | test | lint | format | inspect | worker:dev |
+  worker:deploy`.
 - Each package has its own `tsconfig.json` (`strict`, `verbatimModuleSyntax`, `erasableSyntaxOnly`,
   `allowImportingTsExtensions`, `noEmit`). Source imports use `.ts` and run directly in Node; `tsc` only
   typechecks.
 - Env (`PORT`, `DATABASE_PATH`, `TYPESAFE_AI_API_KEY`, `JEV_MODEL`) is read once in
-  `index.ts`, loaded from `apps/server/.env` by Node's `--env-file-if-exists`.
+  `index.ts`, loaded from `apps/server/.env` by Node's `--env-file-if-exists`. The Worker reads
+  `TYPESAFE_AI_API_KEY` and `JEV_MODEL` from its env (secrets, or `.env` under `wrangler dev`).
 
 ## Decisions
 
@@ -655,8 +681,8 @@ interface MoveFacts {
 | 7   | Mutating tools require the `ply` the caller saw; saves are conditional on the loaded game               | `ply` catches stale views; comparing the stored game catches racing writes, including same-ply changes. |
 | 8   | React with `react-chessboard`                                                                           | MIT, inline SVG pieces, drag/drop for the stretch goal.                                                 |
 | 9   | Engine replies are played inside the move call that hands them the turn                                 | One call per human move. Simpler for the model and the UI.                                              |
-| 10  | No auth. Game UUIDs are the only identifier.                                                            | Out of scope for v1.                                                                                    |
-| 11  | Local only, no deploy                                                                                   | Focus on the product first.                                                                             |
+| 10  | No auth. Game UUIDs are the only identifier. A per-IP rate limit when hosted.                           | Out of scope for v1. The limit guards the prepaid Jev credit.                                           |
+| 11  | Hosted as a Cloudflare Worker with D1; Node and SQLite locally                                          | Same app and SQL in both. No server to run, and D1 keeps `SqliteStore`'s conditional write as is.       |
 | 12  | Separate `make_move` (assistant) and `submit_human_move` (human) tools                                  | Board-linking is per tool; the human's own move shouldn't redraw the board.                             |
 | 13  | Separate `play_against_jev` tool for the human's moves against Jev                                      | Jev's reply arrives in the same call, so the board must show; per-tool linking forces a separate tool.  |
 | 14  | Coaching facts come from the server; the LLM writes the words and checks claims with `analyze_position` | LLMs misread boards with full confidence, and a wrong "you blundered" undermines the coach.             |

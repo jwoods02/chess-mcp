@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch src/index.ts",
     "start": "node --env-file-if-exists=.env src/index.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy"
   },
   "dependencies": {
     "@ai-sdk/typesafe-ai": "catalog:",
@@ -22,6 +24,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "catalog:"
+    "@types/better-sqlite3": "catalog:",
+    "wrangler": "catalog:"
   }
 }

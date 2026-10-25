@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The hosted server at chess.jameswoods.co.uk. `pnpm worker:deploy` from the repo root builds the
+  // board UI and deploys. The account comes from `wrangler login` (or CLOUDFLARE_ACCOUNT_ID), so no IDs
+  // are committed here.
+  "name": "chess-mcp",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+  },
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "chess.jameswoods.co.uk",
+      "custom_domain": true,
+    },
+  ],
+  "vars": {
+    "HOST": "chess.jameswoods.co.uk",
+  },
+  // Created on the first deploy (automatic provisioning). Wrangler then writes the database ID
+  // back into this file; the binding stays linked without it, so that change needn't be committed.
+  "d1_databases": [
+    {
+      "binding": "DB",
+    },
+  ],
+  // Per IP address and approximate (counted per Cloudflare location). Keep the message in
+  // worker.ts in step with the limit.
+  "ratelimits": [
+    {
+      "name": "RATE_LIMIT",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 60,
+        "period": 60,
+      },
+    },
+  ],
+}

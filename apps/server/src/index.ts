@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { typeSafeAi } from '@ai-sdk/typesafe-ai';
 import { createApp } from './app.ts';
+import { readBoardHtml } from './board-html.ts';
 import { createJev } from './opponents/jev.ts';
 import { SqliteStore } from './store/sqlite.ts';
 
@@ -12,7 +13,10 @@ const jev = process.env.TYPESAFE_AI_API_KEY
   ? createJev(typeSafeAi.decisionModel(jevModel))
   : undefined;
 
-serve({ fetch: createApp({ store, jev, logRequests: true }).fetch, port }, (info) => {
-  const jevStatus = jev ? `Jev on (${jevModel})` : 'Jev off: no TYPESAFE_AI_API_KEY';
-  console.log(`MCP server listening on http://localhost:${info.port}/mcp (${jevStatus})`);
-});
+serve(
+  { fetch: createApp({ store, jev, boardHtml: readBoardHtml, logRequests: true }).fetch, port },
+  (info) => {
+    const jevStatus = jev ? `Jev on (${jevModel})` : 'Jev off: no TYPESAFE_AI_API_KEY';
+    console.log(`MCP server listening on http://localhost:${info.port}/mcp (${jevStatus})`);
+  },
+);

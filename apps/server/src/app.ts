@@ -5,13 +5,18 @@ import { buildMcpServer, type ServerOptions } from './mcp.ts';
 
 export function createApp({
   logRequests = false,
+  host,
   ...options
-}: ServerOptions & { logRequests?: boolean }) {
+}: ServerOptions & {
+  logRequests?: boolean;
+  /** The public hostname when hosted. Requests for any other host are refused. */
+  host?: string;
+}) {
   // Stateless: a fresh McpServer per request. Games live in the store, keyed by ID.
   const mcp = createMcpHandler(() => buildMcpServer(options));
 
-  // createMcpHonoApp adds JSON body parsing and localhost Host/Origin validation.
-  const app = createMcpHonoApp();
+  // createMcpHonoApp adds JSON body parsing and Host validation (localhost only by default).
+  const app = createMcpHonoApp(host ? { host, allowedHosts: [host] } : {});
   app.get('/health', (c) => c.json({ status: 'ok' }));
   if (logRequests) app.use('/mcp', logMcpRequest);
   app.all('/mcp', (c: Context) => mcp.fetch(c.req.raw, { parsedBody: c.get('parsedBody') }));

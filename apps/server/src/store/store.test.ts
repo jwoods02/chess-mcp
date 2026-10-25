@@ -1,10 +1,25 @@
+import Database from 'better-sqlite3';
 import { describe, expect, test } from 'vitest';
 import { applyMove, createGame, resign } from '../chess/game.ts';
+import { D1Store, type D1Database } from './d1.ts';
 import { SqliteStore } from './sqlite.ts';
+import type { GameStore } from './store.ts';
 
-const makeStore = () => new SqliteStore(':memory:');
+/** Just enough of D1's API, over SQLite in memory, to run D1Store's SQL for real. */
+function fakeD1(): D1Database {
+  const db = new Database(':memory:');
+  const statement = (sql: string, values: unknown[] = []) => ({
+    bind: (...next: unknown[]) => statement(sql, next),
+    first: async <T>() => (db.prepare(sql).get(...values) as T | undefined) ?? null,
+    run: async () => ({ meta: { changes: db.prepare(sql).run(...values).changes } }),
+  });
+  return { prepare: (sql) => statement(sql) };
+}
 
-describe('sqlite store', () => {
+describe.each<[string, () => GameStore]>([
+  ['sqlite', () => new SqliteStore(':memory:')],
+  ['d1', () => new D1Store(fakeD1())],
+])('%s store', (_name, makeStore) => {
   test('creates and loads a game', async () => {
     const store = makeStore();
     const game = createGame({ white: 'human', black: 'llm' });
