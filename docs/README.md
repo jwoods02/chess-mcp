@@ -13,3 +13,5 @@ board (MCP Apps) and a full text fallback.
 
 - [Architecture](./architecture.md): stack, repo layout, running locally, domain model, storage, MCP tools and
   schemas, the MCP App, opponents (Jev), coaching modes and decisions
+- [Moving pieces on the board](./mcp-apps-hosts.md): what MCP Apps hosts (Claude, ChatGPT) actually
+  allow a board to do, how we found out, and what it means for the product
