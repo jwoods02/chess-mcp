@@ -13,10 +13,11 @@ const TIMEOUT_MS = 2500;
  */
 export function createJev(model: Experimental_DecisionModel): Opponent {
   return {
-    async chooseMove({ fen, moves, legalMoves }) {
+    async chooseMove({ fen, moves }) {
       const chess = new Chess(fen);
       const side = colorName(chess.turn());
-      const options = chess.moves({ verbose: true }).filter((m) => legalMoves.includes(m.san));
+      const options = chess.moves({ verbose: true });
+      const legalMoves = options.map((m) => m.san);
       const started = Date.now();
 
       const result = await decide({
@@ -47,10 +48,7 @@ export function createJev(model: Experimental_DecisionModel): Opponent {
           ? result.answers.move.choice
           : legalMoves[0]!,
       );
-      return {
-        move,
-        meta: { probabilities: topMoves(probabilities, 5), latencyMs: Date.now() - started },
-      };
+      return { move, probabilities, latencyMs: Date.now() - started };
     },
   };
 }
@@ -65,13 +63,4 @@ function describeMove(move: Move): string {
   if (move.san.endsWith('#')) parts.push('checkmate');
   else if (move.san.endsWith('+')) parts.push('check');
   return parts.join(', ');
-}
-
-function topMoves(probabilities: Record<string, number>, count: number): Record<string, number> {
-  return Object.fromEntries(
-    Object.entries(probabilities)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, count)
-      .map(([san, p]) => [san, Math.round(p * 100) / 100]),
-  );
 }

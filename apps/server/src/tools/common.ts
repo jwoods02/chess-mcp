@@ -112,7 +112,7 @@ export async function handle(
     return {
       isError: true,
       content: [{ type: 'text', text: `${message}\n\nCurrent position:\n${gameText(shown)}` }],
-      structuredContent: shown,
+      structuredContent: { ...shown, error: { code: error.code, message: error.message } },
     };
   }
 }

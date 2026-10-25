@@ -1,6 +1,7 @@
 import type { GameState } from '@chess-mcp/shared';
 import { replay, seat, type Game } from '../chess/game.ts';
 
+/** The game as clients see it: the position, the moves, whose turn it is and the settings. */
 export function toState(game: Game): GameState {
   const chess = replay(game);
   chess.setHeader('White', game.white);

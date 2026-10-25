@@ -230,7 +230,7 @@ code. We'll add columns or tables when a real query needs them.
     ASCII one tends to repeat it. Clients that don't say (older protocols, text-only) get it, so
     text-first still holds.
 - Rule violations return `isError: true` with a `code`, a message and the current text board, so the
-  model can recover in one step.
+  model can recover in one step. The structured result is the current GameView plus `error`.
 - Server `instructions` (sent on `initialize`) tell the model to relay the human's move and play its
   reply in the same turn, to stay conversational, and to read the `board` field as the signal: no
   `board` means the human sees it inline, so the reply keeps the board, FEN, moves and ply out; a
@@ -280,6 +280,7 @@ interface GameView {
   next: string; // what should happen next, and which tool to call
   note?: string; // anything else to act on, e.g. "call get_game to show them the board"
   coaching: CoachingBlock; // see Coaching modes
+  error?: { code: string; message: string }; // on an error result; the board reads the code from here
 }
 ```
 
@@ -472,10 +473,11 @@ packages/board-app/src/
 ```ts
 // opponents/opponent.ts
 interface Opponent {
-  // `moves` is the game so far in numbered notation ("1. e4 e5 2. Nf3"); `legalMoves` is SAN.
-  chooseMove(position: { fen: string; moves: string; legalMoves: string[] }): Promise<{
-    move: string;
-    meta?: MoveMeta;
+  // `moves` is the game so far in numbered notation ("1. e4 e5 2. Nf3"). The caller checks legality.
+  chooseMove(position: { fen: string; moves: string }): Promise<{
+    move: string; // SAN
+    probabilities?: Record<string, number>; // every legal move it rated; lower levels draw from these
+    latencyMs?: number;
   }>;
 }
 ```
@@ -484,7 +486,9 @@ interface Opponent {
   (`playJevReply` in `opponents/reply.ts`): `play_against_jev`, `make_move` (LLM vs Jev), `undo_move`,
   and `new_game` when Jev plays White. The human's move and Jev's reply are saved in one conditional write.
 - **chess.js decides, Jev only chooses.** chess.js produces the legal moves Jev chooses from, checks
-  Jev's answer against them, and plays it through the same `applyMove` as every other move.
+  Jev's answer against them, and plays it through the same `applyMove` as every other move. The game
+  records Jev's five likeliest moves with its move (its "instinct"); below `best`, the move is drawn
+  from all of Jev's probabilities, not that shortened record.
 - **Timeouts and failure:** each Jev call has a 2.5s timeout and no SDK retries. If Jev errors, times
   out or returns something illegal, the server retries once, then plays a random legal move and records
   why in the move's `meta`, so the game never gets stuck. The result text says when this happened.

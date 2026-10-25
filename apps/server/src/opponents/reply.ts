@@ -15,13 +15,15 @@ export async function playJevReply(game: Game, jev: Opponent | undefined): Promi
   if (seat(game, chess.turn()) !== 'jev' || !jev) return game;
 
   const legalMoves = chess.moves();
-  const position = { fen: chess.fen(), moves: moveText(chess.pgn()), legalMoves };
+  const position = { fen: chess.fen(), moves: moveText(chess.pgn()) };
   let lastError = 'no legal move returned';
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const { move: top, meta } = await jev.chooseMove(position);
+      const { move: top, probabilities = {}, latencyMs } = await jev.chooseMove(position);
       const level = game.opponentLevel ?? 'best';
-      const move = level === 'best' ? top : (pickAtLevel(meta?.probabilities ?? {}, level) ?? top);
+      const move = level === 'best' ? top : (pickAtLevel(probabilities, level) ?? top);
+      // The game keeps Jev's five likeliest moves with its move, to show its instinct.
+      const meta = { probabilities: topMoves(probabilities, 5), latencyMs };
       if (legalMoves.includes(move)) return applyMove(game, move, 'jev', meta);
       lastError = `illegal move ${move}`;
     } catch (error) {
@@ -31,4 +33,13 @@ export async function playJevReply(game: Game, jev: Opponent | undefined): Promi
   console.error(`Jev failed (${lastError}); playing a random legal move`);
   const random = legalMoves[Math.floor(Math.random() * legalMoves.length)]!;
   return applyMove(game, random, 'jev', { fallback: `random move, Jev failed: ${lastError}` });
+}
+
+function topMoves(probabilities: Record<string, number>, count: number): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(probabilities)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, count)
+      .map(([san, p]) => [san, Math.round(p * 100) / 100]),
+  );
 }

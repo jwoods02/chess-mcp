@@ -184,6 +184,8 @@ test('rejects illegal moves and stale plies, showing the current board', async (
   expect(stale.isError).toBe(true);
   expect(stale.content[0]!.text).toContain('Error [stale_state]');
   expect(stale.structuredContent.moves).toEqual(['e4']);
+  // The board reads the code from the structured result, not the text.
+  expect(stale.structuredContent.error?.code).toBe('stale_state');
 });
 
 test('points the model at the right move tool', async () => {

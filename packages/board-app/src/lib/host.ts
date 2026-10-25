@@ -1,5 +1,6 @@
 // Talking to the host and the server from the board. Hosts differ in what they allow (see
 // docs/mcp-apps-hosts.md), so every call is tried and every failure has a fallback.
+import type { GameView } from '@chess-mcp/shared';
 import type { App as McpApp } from '@modelcontextprotocol/ext-apps/react';
 
 export type { McpApp };
@@ -51,14 +52,14 @@ export function resultText(result: ToolResult): string {
 }
 
 /**
- * Why the server rejected something, worded for the human. Error text is written for the model, so
- * drop its instructions and the list of legal moves.
+ * Why the server rejected something, worded for the human. Error messages are written for the model,
+ * so drop the list of legal moves.
  */
 export function errorNotice(result: ToolResult): string {
-  const [, code, message] = /^Error \[(\w+)\]: (.*)$/m.exec(resultText(result)) ?? [];
+  const error = (result.structuredContent as Partial<GameView> | undefined)?.error;
   // Usually an older board further up the chat.
-  if (code === 'stale_state') {
+  if (error?.code === 'stale_state') {
     return 'This board was out of date. It now shows the latest position.';
   }
-  return message?.replace(/ Legal moves: .*$/, '') ?? 'That could not be done.';
+  return error?.message.replace(/ Legal moves: .*$/, '') ?? 'That could not be done.';
 }

@@ -158,6 +158,10 @@ export const GameView = GameState.extend({
   next: z.string().describe('What should happen next, and which tool to call'),
   note: z.string().optional().describe('Anything else to act on, e.g. showing the human the board'),
   coaching: CoachingBlock,
+  error: z
+    .object({ code: z.string(), message: z.string() })
+    .optional()
+    .describe('On an error result: what was refused. The rest is the current game.'),
 });
 export type GameView = z.infer<typeof GameView>;
 
