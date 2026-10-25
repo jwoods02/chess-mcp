@@ -96,14 +96,8 @@ function App() {
     const next = result.structuredContent as GameView | undefined;
     if (next) setView(next);
     if (result.isError || !next) {
-      // Stale, or illegal in a way the local check missed: the board is back on the server's
-      // position; say why, without the list of legal moves that the model gets.
-      setNotice(
-        resultText(result)
-          .split('\n')[0]
-          ?.replace(/^Error \[\w+\]: /, '')
-          .replace(/ Legal moves: .*$/, ''),
-      );
+      // The board is back on the server's position; say why.
+      setNotice(errorNotice(result));
       return;
     }
     setNotice(await tellAssistant(app, next, result));
@@ -261,6 +255,18 @@ function movePiece(fen: string, from: string, to: string): PositionDataType {
   const next = { ...position, [to]: piece };
   delete next[from];
   return next;
+}
+
+/**
+ * Why the server rejected a move, worded for the human. Error text is written for the model, so
+ * drop its instructions and the list of legal moves.
+ */
+function errorNotice(result: ToolResult): string {
+  const [, code, message] = /^Error \[(\w+)\]: (.*)$/m.exec(resultText(result)) ?? [];
+  // Usually an older board further up the chat.
+  if (code === 'stale_state')
+    return 'This board was out of date. It now shows the latest position.';
+  return message?.replace(/ Legal moves: .*$/, '') ?? 'That move could not be played.';
 }
 
 function resultText(result: ToolResult): string {
