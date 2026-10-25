@@ -8,16 +8,25 @@ const facts: MoveFacts = {
   loses: 3,
   allowsMate: [],
   missedMate: [],
-  material: 0,
+  material: 'level',
 };
 
-test('blunder check speaks when a move loses a piece, saying whether the reply took it', () => {
-  expect(blunderCheck.speak(facts)).toBe('Bc4 loses material (3): the bishop on c4 can be won.');
-  expect(blunderCheck.speak({ ...facts, reply: 'dxc4' })).toBe(
-    'Bc4 loses material (3): the bishop on c4 can be won.',
+test('blunder check speaks when a move loses a piece, in step with the reply', () => {
+  expect(blunderCheck.speak(facts)).toBe(
+    'Bc4 loses 3 points of material: the bishop on c4 can be taken.',
   );
-  expect(blunderCheck.speak({ ...facts, reply: 'dxe4' })).toContain(
-    "The reply dxe4 didn't take advantage of it, so it may still be there.",
+  expect(blunderCheck.speak({ ...facts, reply: 'dxc4' })).toBe(
+    'Bc4 lost 3 points of material: the reply dxc4 took the bishop.',
+  );
+  expect(blunderCheck.speak({ ...facts, reply: 'dxe4' })).toBe(
+    "Bc4 left the bishop on c4 hanging (3 points of material), but the reply dxe4 didn't take it, so it may still be there.",
+  );
+});
+
+test('a missed mate after a capture credits the capture first', () => {
+  const capture = { ...facts, move: 'Qxc4', captured: 'bishop', hanging: [], loses: 0 };
+  expect(blunderCheck.speak({ ...capture, missedMate: ['Qd7#'] })).toBe(
+    'Qxc4 won a bishop, but there was mate in one: Qd7#.',
   );
 });
 

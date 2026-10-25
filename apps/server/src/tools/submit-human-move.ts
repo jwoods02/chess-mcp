@@ -44,6 +44,7 @@ export function registerSubmitHumanMove(server: McpServer, { store }: ToolDeps) 
         const view = toState(game);
         const humanMustSee = view.status === 'finished' || view.toMove === 'human';
         return gameResult(game, {
+          afterMove: true,
           note: humanMustSee
             ? 'The human has not seen this position: call get_game to show them the board.'
             : undefined,

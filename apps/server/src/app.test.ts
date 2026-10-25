@@ -179,7 +179,7 @@ describe('coaching', () => {
     const { gameId } = start.structuredContent;
     // A new game carries the full guidance; later results only the one-line summary.
     expect(start.structuredContent.coaching).toMatchObject({
-      mode: 'blunder_check@1',
+      mode: 'blunder_check@2',
       speak: false,
     });
     expect(start.structuredContent.coaching.guidance).toContain('blunder check');
@@ -197,6 +197,11 @@ describe('coaching', () => {
     });
     expect(blunder.structuredContent.coaching.guidance).toContain('undo_move');
     expect(blunder.content[0]!.text).toContain('Coach, speak now: g4 allows mate in one: Qh4#.');
+
+    // Taking the move back doesn't repeat the warning: facts only come with a move just played.
+    const undone = await callTool('undo_move', { gameId, ply: 3, plies: 1 });
+    expect(undone.structuredContent.coaching).toMatchObject({ speak: false });
+    expect(undone.structuredContent.coaching.facts).toBeUndefined();
   });
 
   test('play mode never speaks; settings change mid-game, including how the assistant plays', async () => {
@@ -220,7 +225,7 @@ describe('coaching', () => {
       opponentLevel: 'beginner',
     });
     expect(changed.structuredContent).toMatchObject({
-      coachingMode: 'blunder_check@1',
+      coachingMode: 'blunder_check@2',
       opponentLevel: 'beginner',
       ply: 3,
     });

@@ -80,19 +80,19 @@ export const MoveFacts = z.object({
   captured: z.string().optional().describe('The piece it captured'),
   hanging: z
     .array(z.object({ piece: z.string(), square: z.string(), loses: z.number() }))
-    .describe("The mover's pieces the opponent can now win, and how much each loses in pawns"),
+    .describe(
+      "The mover's pieces the opponent can now win, and how many points each loses (pawn 1, knight or bishop 3, rook 5, queen 9). Even trades aren't listed.",
+    ),
   loses: z
     .number()
-    .describe(
-      'Material the move stands to lose, in pawns: the worst hanging loss minus what it captured',
-    ),
+    .describe('Points the move stands to lose: the worst hanging loss minus what it captured'),
   allowsMate: z.array(z.string()).describe("The opponent's mates in one after this move"),
   missedMate: z.array(z.string()).describe('Mates in one the mover had and did not play'),
   missedWin: z
     .object({ move: z.string(), wins: z.number() })
     .optional()
     .describe('A capture the mover passed up that wins more material'),
-  material: z.number().describe('Material after the move, White minus Black, in pawns'),
+  material: z.string().describe('The material balance now, e.g. "White is up 3 points" or "level"'),
   reply: z
     .string()
     .optional()

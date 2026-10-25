@@ -20,6 +20,18 @@ test('a capture that loses the piece: knight for a pawn', () => {
   expect(facts?.hanging[0]).toEqual({ piece: 'knight', square: 'f7', loses: 3 });
 });
 
+test("an even trade isn't hanging, and material is the balance after any reply", () => {
+  expect(humanMoveFacts(play('e4', 'd5', 'exd5'))).toMatchObject({
+    hanging: [],
+    loses: 0,
+    material: 'White is up 1 point',
+  });
+  expect(humanMoveFacts(play('e4', 'd5', 'exd5', 'Qxd5'))).toMatchObject({
+    reply: 'Qxd5',
+    material: 'level',
+  });
+});
+
 test('a missed mate in one', () => {
   expect(humanMoveFacts(play(...MATE_ON_H7, 'Nc3'))?.missedMate).toEqual(['Qxh7#']);
 });

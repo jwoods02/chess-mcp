@@ -15,8 +15,8 @@ export const LEVELS: Record<Level, LevelSettings> = {
     label: 'beginner',
     rating: 400,
     persona:
-      'develop slowly, sometimes leave a piece undefended or miss a threat, and grab free material ' +
-      "when you see it. Don't hang your queen on purpose or play random moves.",
+      'develop slowly, often leave pieces undefended, miss threats and blunder now and then, and ' +
+      'grab free material when you see it.',
     jev: { topN: 5, temperature: 2 },
   },
   casual: {

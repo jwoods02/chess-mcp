@@ -23,7 +23,7 @@ export function humanMoveFacts(game: Game): MoveFacts | undefined {
 /**
  * What the move at `index` captured, what it leaves hanging, and what it missed, judged right after
  * the move. If the opponent has replied since, the reply is included, because it may not have taken
- * what was hanging.
+ * what was hanging, and the material balance is the one after it.
  */
 export function moveFacts(game: Game, index: number): MoveFacts {
   const chess = replay({ ...game, moves: game.moves.slice(0, index) });
@@ -37,17 +37,21 @@ export function moveFacts(game: Game, index: number): MoveFacts {
   const playedGain = capturedValue - exchangeGain(chess, played.to);
   const hanging = hangingPieces(chess, mover);
   const worst = Math.max(0, ...hanging.map((h) => h.loses));
+  const allowsMate = mates(chess);
+  const reply = game.moves[index + 1]?.san;
+  if (reply) chess.move(reply);
 
   return {
     move: played.san,
     ...(played.captured && { captured: NAME[played.captured] }),
-    hanging,
+    // A capturing piece that can be taken back for no more than it took is a trade, not hanging.
+    hanging: hanging.filter((h) => h.square !== played.to || h.loses > capturedValue),
     loses: Math.max(0, worst - capturedValue),
-    allowsMate: mates(chess),
+    allowsMate,
     missedMate: played.san.endsWith('#') ? [] : matesBefore,
     ...(best && best.wins >= 2 && best.wins > playedGain && { missedWin: best }),
-    material: material(chess),
-    ...(game.moves[index + 1] && { reply: game.moves[index + 1]!.san }),
+    material: materialText(material(chess)),
+    ...(reply && { reply }),
   };
 }
 
@@ -94,6 +98,13 @@ function bestCapture(chess: Chess): { move: string; wins: number } | undefined {
 
 function mates(chess: Chess): string[] {
   return chess.moves().filter((san) => san.endsWith('#'));
+}
+
+/** "White is up 3 points", "Black is up 1 point" or "level". */
+function materialText(balance: number): string {
+  if (balance === 0) return 'level';
+  const points = Math.abs(balance);
+  return `${balance > 0 ? 'White' : 'Black'} is up ${points} ${points === 1 ? 'point' : 'points'}`;
 }
 
 /** White minus Black, in pawns. */

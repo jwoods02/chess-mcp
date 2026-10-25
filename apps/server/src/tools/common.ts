@@ -42,12 +42,13 @@ export const levelInput = Level.describe(
  * A successful result: the text response plus the GameView as structured content. Both carry the
  * board, the next step and the coaching, since some clients show the model only one of them. Ask for
  * `fullGuidance` when the model may not know the game's coaching yet: a start, resume or change.
+ * Move tools pass `afterMove`, so the coaching includes facts about the move just played.
  */
 export function gameResult(
   game: Game,
-  { note, fullGuidance = false }: { note?: string; fullGuidance?: boolean } = {},
+  options: { note?: string; fullGuidance?: boolean; afterMove?: boolean } = {},
 ): CallToolResult {
-  const view = gameView(toState(game), coachingBlock(game, fullGuidance), note);
+  const view = gameView(toState(game), coachingBlock(game, options), options.note);
   return { content: [{ type: 'text', text: gameText(view) }], structuredContent: view };
 }
 

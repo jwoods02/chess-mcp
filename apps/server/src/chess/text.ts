@@ -75,11 +75,13 @@ function coachingLines(coaching: CoachingBlock): string[] {
 function factsText(facts: MoveFacts): string {
   const parts = [facts.move];
   if (facts.captured) parts.push(`captured a ${facts.captured}`);
-  for (const h of facts.hanging) parts.push(`${h.piece} on ${h.square} can be won (${h.loses})`);
+  for (const h of facts.hanging) {
+    parts.push(`${h.piece} on ${h.square} could be won (${h.loses} points)`);
+  }
   if (facts.allowsMate.length) parts.push(`allows mate: ${facts.allowsMate.join(', ')}`);
   if (facts.missedMate.length) parts.push(`missed mate: ${facts.missedMate.join(', ')}`);
   if (facts.missedWin) parts.push(`missed ${facts.missedWin.move} winning ${facts.missedWin.wins}`);
-  parts.push(`material ${facts.material > 0 ? '+' : ''}${facts.material}`);
+  parts.push(`material now: ${facts.material}`);
   if (facts.reply) parts.push(`then the reply ${facts.reply}`);
   return parts.join('; ');
 }

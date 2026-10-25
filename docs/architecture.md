@@ -520,28 +520,32 @@ interface CoachingBlock {
 interface MoveFacts {
   move: string; // 'Nxf7'
   captured?: string; // 'pawn'
-  hangs: string[]; // the mover's pieces the opponent can now win: 'knight on f7 (loses 3)'
+  hanging: { piece: string; square: string; loses: number }[]; // what the opponent can now win, in points; even trades left out
+  loses: number; // points the move stands to lose: the worst hanging loss minus what it captured
   allowsMate: string[]; // the opponent's mates in one: ['Qxf2#']
   missedMate: string[]; // mates in one the mover had and didn't play
-  missedWin?: string; // the best capture the mover passed up: 'Bxe5 wins 3'
-  material: number; // after the move, White minus Black, in pawns
-  reply?: string; // the opponent's reply, if played: the facts are from before it
+  missedWin?: { move: string; wins: number }; // the best capture the mover passed up
+  material: string; // the balance now, after any reply: 'White is up 3 points' or 'level'
+  reply?: string; // the opponent's reply, if played: the other facts are from before it
 }
 ```
 
 - **One file per mode** in `coaching/modes/`, with a plain object map as the registry
   (`coaching/coaching.ts`). Changing a mode's wording means bumping its version.
-- **Built:** `play` (never speaks) and `blunder_check` (speaks when the human's move loses at least two
-  points of material, allows a mate in one or misses one).
+- **Built:** `play` (never speaks) and `blunder_check@2` (speaks when the human's move loses at least
+  two points of material, allows a mate in one or misses one; a missed mate after a capture credits the
+  capture first).
 - **Layered guidance** ([why](./product/coaching-modes.md#keeping-the-model-on-track)): the server
   instructions carry a standing rule; every result carries `coaching.summary` and, on the LLM's move,
   the opponent level in `next`; `coaching.guidance` is added only at key moments. `gameResult()` adds
   it when the tool asks for it (`new_game`, `get_game`, `update_game_settings`), when the game is over,
-  or when the mode speaks. Tools otherwise don't change.
+  or when the mode speaks. Facts, and so speaking, only come with the move tools' results
+  (`afterMove`): after an undo or on a resumed game they would repeat old news.
 - **Facts** (`chess/facts.ts`, pure, unit tested) describe the human's move this round: the latest
   human move, if it's one of the last two plies. They're judged right after that move, so when the
   opponent has already replied (always, against Jev), the reply is included and `blunder_check` says
-  whether it took advantage. Material is won or lost by a static exchange: both
+  whether it took advantage. Facts are written for a model that sees only the JSON: plain units
+  (points) and plain text where a sign would need explaining. Material is won or lost by a static exchange: both
   sides keep recapturing with their cheapest piece while it pays. Only legal captures count, so a
   pinned attacker doesn't make a piece look hanging (a playtest false alarm). An engine can add
   evaluation later without changing the modes.

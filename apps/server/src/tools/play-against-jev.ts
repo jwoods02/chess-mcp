@@ -42,6 +42,7 @@ export function registerPlayAgainstJev(server: McpServer, { store, jev }: ToolDe
             }
             return playJevReply(applyMove(game, move, 'human'), jev);
           }),
+          { afterMove: true },
         ),
       ),
   );

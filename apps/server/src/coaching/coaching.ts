@@ -23,11 +23,15 @@ export function modeOf(game: Pick<Game, 'coachingMode'>): CoachingMode {
 /**
  * How to coach right now. The summary is always there; the full guidance only at key moments: when
  * the caller asks (a game starts, resumes or changes settings), when the game is over, or when the
- * mode has something to say.
+ * mode has something to say. Facts, and so speaking, only come with a move that was just played: an
+ * undo or a resumed game would otherwise repeat old news.
  */
-export function coachingBlock(game: Game, fullGuidance = false): CoachingBlock {
+export function coachingBlock(
+  game: Game,
+  { fullGuidance = false, afterMove = false }: { fullGuidance?: boolean; afterMove?: boolean } = {},
+): CoachingBlock {
   const mode = modeOf(game);
-  const facts = humanMoveFacts(game);
+  const facts = afterMove ? humanMoveFacts(game) : undefined;
   const reason = mode.speak(facts);
   const full = fullGuidance || reason !== undefined || game.status === 'finished';
   return {

@@ -32,6 +32,7 @@ export function registerMakeMove(server: McpServer, { store, jev }: ToolDeps) {
           await changeGame(store, gameId, ply, (game) =>
             playJevReply(applyMove(game, move, 'llm'), jev),
           ),
+          { afterMove: true },
         ),
       ),
   );
