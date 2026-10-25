@@ -13,8 +13,7 @@ export function gameText(view: GameView): string {
   const lines = [
     `Game ${view.gameId} · White: ${playerName(view.white)} · Black: ${playerName(view.black)}`,
     '',
-    view.board,
-    '',
+    ...(view.board ? [view.board, ''] : []),
     `FEN: ${view.fen}`,
     `Moves: ${moveText(view.pgn) || '(none yet)'}`,
   ];

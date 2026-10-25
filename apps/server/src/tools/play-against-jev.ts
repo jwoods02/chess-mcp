@@ -31,7 +31,7 @@ export function registerPlayAgainstJev(server: McpServer, { store, jev }: ToolDe
       _meta: SHOWS_BOARD,
     },
     ({ gameId, ply, move }) =>
-      handle(store, gameId, async () =>
+      handle(server, store, gameId, async () =>
         gameResult(
           await changeGame(store, gameId, ply, (game) => {
             if (!hasJev(game)) {

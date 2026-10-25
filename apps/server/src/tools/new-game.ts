@@ -40,7 +40,7 @@ export function registerNewGame(server: McpServer, { store, jev }: ToolDeps) {
       _meta: SHOWS_BOARD,
     },
     ({ white, black, startFen, coaching, opponentLevel }) =>
-      handle(store, undefined, async () => {
+      handle(server, store, undefined, async () => {
         const created = createGame({
           white,
           black,

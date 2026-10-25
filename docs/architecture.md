@@ -218,12 +218,19 @@ code. We'll add columns or tables when a real query needs them.
     the next step and any note, because some clients show the model only `structuredContent`: Claude
     Code does this for successful results (errors show the text). Playtests found models there saw no
     board and no "call make_move with ply N".
+  - **The ASCII board is left out when the client shows the board UI.** On the 2026-07-28 protocol each
+    request carries the client's capabilities, and `handle()` checks for the MCP Apps extension
+    (`clientShowsBoard` in `board-ui.ts`). The human already sees the real board, and a model given the
+    ASCII one tends to repeat it. Clients that don't say (older protocols, text-only) get it, so
+    text-first still holds.
 - Rule violations return `isError: true` with a `code`, a message and the current text board, so the
   model can recover in one step.
 - Server `instructions` (sent on `initialize`) tell the model to relay the human's move and play its
-  reply in the same turn, to stay conversational, and, when the board is shown inline, not to repeat
-  the board, FEN, moves or ply. The server is stateless, so it can't tell per call whether the client
-  renders apps; the instruction is conditional and the model decides.
+  reply in the same turn, to stay conversational, and to read the `board` field as the signal: no
+  `board` means the human sees it inline, so the reply keeps the board, FEN, moves and ply out; a
+  `board` means they don't, so the reply includes it.
+- Clients cache the tool list, output schemas included, per conversation. After a schema change,
+  start a new chat or reconnect, or the client may reject results against the old schema.
 - Tool descriptions tell the model: _"Read the position from the latest tool result; a board you track
   yourself drifts."_
 
@@ -261,7 +268,7 @@ interface GameView {
   coachingMode: string; // 'blunder_check@1'
   opponentLevel: Level;
   // The text the model needs, also in the structured result:
-  board: string; // ASCII board from the human's side
+  board?: string; // ASCII board from the human's side; only when the client doesn't show the board UI
   next: string; // what should happen next, and which tool to call
   note?: string; // anything else to act on, e.g. "call get_game to show them the board"
   coaching: CoachingBlock; // see Coaching modes

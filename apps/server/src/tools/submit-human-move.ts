@@ -29,7 +29,7 @@ export function registerSubmitHumanMove(server: McpServer, { store }: ToolDeps) 
       _meta: CALLABLE_FROM_BOARD,
     },
     ({ gameId, ply, move }) =>
-      handle(store, gameId, async () => {
+      handle(server, store, gameId, async () => {
         const game = await changeGame(store, gameId, ply, (g) => {
           if (hasJev(g)) {
             throw new ChessError(

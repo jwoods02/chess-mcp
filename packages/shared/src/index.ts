@@ -116,7 +116,12 @@ export type CoachingBlock = z.infer<typeof CoachingBlock>;
  * clients (Claude Code) show the model only structuredContent, so it has to be complete on its own.
  */
 export const GameView = GameState.extend({
-  board: z.string().describe("ASCII board from the human's side. Uppercase is White."),
+  board: z
+    .string()
+    .optional()
+    .describe(
+      "ASCII board from the human's side, uppercase White. Present only when the client doesn't show the board UI.",
+    ),
   next: z.string().describe('What should happen next, and which tool to call'),
   note: z.string().optional().describe('Anything else to act on, e.g. showing the human the board'),
   coaching: CoachingBlock,

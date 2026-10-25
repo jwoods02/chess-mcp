@@ -26,7 +26,7 @@ export function registerUndoMove(server: McpServer, { store, jev }: ToolDeps) {
       _meta: SHOWS_BOARD,
     },
     ({ gameId, ply, plies }) =>
-      handle(store, gameId, async () =>
+      handle(server, store, gameId, async () =>
         gameResult(
           await changeGame(store, gameId, ply, (game) => playJevReply(undo(game, plies), jev)),
         ),

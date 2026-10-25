@@ -21,7 +21,8 @@ If a change contradicts the docs, update the docs in the same change (or ask fir
   trust a move, FEN or game state that comes from the model or the UI without checking it.
 - **Text first.** Every tool returns a complete text response **and** `structuredContent`, and each
   must be complete on its own: some clients (Claude Code) show the model only `structuredContent`, so
-  anything the model must read (the board, the next step, notes) goes in both. The board UI is an
+  anything the model must read (the board, the next step, notes) goes in both. The one exception is
+  the ASCII board, left out when the client says it shows the board UI. The board UI is an
   enhancement and never a requirement.
 - **Mutating tools require `ply`**, the caller's last-seen half-move count. If it doesn't match, return
   `stale_state`. Never apply a move against a stale view.

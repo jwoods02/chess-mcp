@@ -1,6 +1,8 @@
 import { Level } from '@chess-mcp/shared';
-import type { CallToolResult } from '@modelcontextprotocol/server';
+import type { GameView } from '@chess-mcp/shared';
+import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { clientShowsBoard } from '../board-ui.ts';
 import { ChessError, toState, type Game } from '../chess/game.ts';
 import { coachingBlock, MODE_IDS, MODES } from '../coaching/coaching.ts';
 import { LEVELS } from '../opponents/levels.ts';
@@ -74,20 +76,28 @@ export async function changeGame(
   return changed;
 }
 
-/** Runs a tool body, turning rule errors into an error result that shows the current board. */
+/**
+ * Runs a tool body, turning rule errors into an error result that shows the current board. When the
+ * client shows the board UI, the ASCII board is left out: the human already sees the real one, and a
+ * model given the ASCII board tends to repeat it.
+ */
 export async function handle(
+  server: McpServer,
   store: GameStore,
   gameId: string | undefined,
   body: () => Promise<CallToolResult>,
 ): Promise<CallToolResult> {
+  const showsBoard = clientShowsBoard(server);
   try {
-    return await body();
+    const result = await body();
+    return showsBoard ? withoutAsciiBoard(result) : result;
   } catch (error) {
     if (!(error instanceof ChessError)) throw error;
     const message = `Error [${error.code}]: ${error.message}`;
     const game = gameId ? await store.get(gameId) : undefined;
     if (!game) return { isError: true, content: [{ type: 'text', text: message }] };
-    const view = gameView(toState(game), coachingBlock(game));
+    const full = gameView(toState(game), coachingBlock(game));
+    const view = showsBoard ? omitBoard(full) : full;
     return {
       isError: true,
       content: [{ type: 'text', text: `${message}\n\nCurrent position:\n${gameText(view)}` }],
@@ -103,4 +113,19 @@ function staleError(actual: number | undefined, expected: number) {
     'stale_state',
     `You passed ply ${expected} but the game ${where}. Nothing was changed. Review the current position below.`,
   );
+}
+
+function withoutAsciiBoard(result: CallToolResult): CallToolResult {
+  const view = result.structuredContent as GameView | undefined;
+  if (!view?.board) return result;
+  const shown = omitBoard(view);
+  return {
+    ...result,
+    content: [{ type: 'text', text: gameText(shown) }],
+    structuredContent: shown,
+  };
+}
+
+function omitBoard(view: GameView): GameView {
+  return { ...view, board: undefined };
 }

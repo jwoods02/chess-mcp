@@ -24,7 +24,7 @@ export function registerLegalMoves(server: McpServer, { store }: ToolDeps) {
       }),
     },
     ({ gameId, square }) =>
-      handle(store, gameId, async () => {
+      handle(server, store, gameId, async () => {
         const moves = legalMoves(await loadGame(store, gameId), square);
         const where = square ? ` from ${square}` : '';
         return {

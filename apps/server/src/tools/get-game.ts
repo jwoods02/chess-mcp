@@ -18,7 +18,7 @@ export function registerGetGame(server: McpServer, { store }: ToolDeps) {
       _meta: SHOWS_BOARD,
     },
     ({ gameId }) =>
-      handle(store, gameId, async () =>
+      handle(server, store, gameId, async () =>
         // Often a resumed game, so repeat the coaching in full.
         gameResult(await loadGame(store, gameId), { fullGuidance: true }),
       ),

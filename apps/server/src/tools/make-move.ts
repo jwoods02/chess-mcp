@@ -27,7 +27,7 @@ export function registerMakeMove(server: McpServer, { store, jev }: ToolDeps) {
       _meta: SHOWS_BOARD,
     },
     ({ gameId, ply, move }) =>
-      handle(store, gameId, async () =>
+      handle(server, store, gameId, async () =>
         gameResult(
           await changeGame(store, gameId, ply, (game) =>
             playJevReply(applyMove(game, move, 'llm'), jev),

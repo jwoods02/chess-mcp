@@ -54,7 +54,7 @@ test('tells the model how to talk about the game', async () => {
     mimeTypes: ['text/html;profile=mcp-app'],
   });
   expect(result.instructions).toContain('same turn');
-  expect(result.instructions).toContain('leave them out of your reply');
+  expect(result.instructions).toContain('keep the board, FEN, moves and ply out of your reply');
 });
 
 type ToolInfo = { name: string; _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } };
@@ -95,6 +95,43 @@ test('marks submit_human_move as callable from the board, without drawing one', 
   const submit = tools.find((t) => t.name === 'submit_human_move');
   expect(submit?._meta?.ui?.visibility).toContain('app');
   expect(submit?._meta?.ui?.resourceUri).toBeUndefined();
+});
+
+test('leaves out the ASCII board when the client shows the board UI', async () => {
+  // On the 2026-07-28 protocol, each request says what the client supports.
+  const res = await app.request('/mcp', {
+    method: 'POST',
+    headers: {
+      host: 'localhost:3000',
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      'mcp-protocol-version': '2026-07-28',
+      'mcp-method': 'tools/call',
+      'mcp-name': 'new_game',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {
+        name: 'new_game',
+        arguments: { white: 'human', black: 'llm' },
+        _meta: {
+          'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+          'io.modelcontextprotocol/clientInfo': { name: 'test', version: '0' },
+          'io.modelcontextprotocol/clientCapabilities': {
+            extensions: {
+              'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] },
+            },
+          },
+        },
+      },
+    }),
+  });
+  const { result } = await res.json();
+  expect(result.structuredContent.board).toBeUndefined();
+  expect(result.structuredContent.next).toContain('call submit_human_move with ply 0');
+  expect(result.content[0].text).not.toContain('│');
 });
 
 test('plays a game to checkmate through the tools', async () => {

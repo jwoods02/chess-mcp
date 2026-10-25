@@ -22,7 +22,7 @@ export function registerDrawOffer(server: McpServer, { store }: ToolDeps) {
       outputSchema: GameView,
     },
     ({ gameId, ply, action, color }) =>
-      handle(store, gameId, async () =>
+      handle(server, store, gameId, async () =>
         gameResult(await changeGame(store, gameId, ply, (game) => draw(game, action, color))),
       ),
   );
