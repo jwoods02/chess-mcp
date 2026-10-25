@@ -122,8 +122,11 @@ describe('applyMove', () => {
 
 describe('undo', () => {
   test('takes back two plies by default and reopens a finished game', () => {
-    const game = undo(play(newGame(), 'f3', 'e5', 'g4', 'Qh4#'), 2);
+    const over = play(newGame(), 'f3', 'e5', 'g4', 'Qh4#');
+    const game = undo({ ...over, keyMoments: [{ move: '2. g4', reason: 'allowed mate' }] }, 2);
     expect(toState(game)).toMatchObject({ moves: ['f3', 'e5'], status: 'active', toMove: 'human' });
+    // The review belongs to the ending that was taken back.
+    expect(game.keyMoments).toBeUndefined();
   });
 
   test('takes back fewer plies if the game is shorter', () => {

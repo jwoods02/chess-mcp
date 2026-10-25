@@ -38,7 +38,11 @@ export function registerAnalyzePosition(server: McpServer, { store }: ToolDeps) 
         const game = await loadGame(store, gameId);
         const now = positionFacts(game);
         const preview = previewLine(game, moves);
-        const line = moves.map((_, i) => moveFacts(preview, game.moves.length + i));
+        // Each move's facts stop at that move; the next move in the line has its own entry.
+        const line = moves.map((_, i) => {
+          const index = game.moves.length + i;
+          return moveFacts({ ...preview, moves: preview.moves.slice(0, index + 1) }, index);
+        });
         const after = moves.length > 0 ? positionFacts(preview) : undefined;
         const text = [
           `Now: ${positionText(now)}.`,

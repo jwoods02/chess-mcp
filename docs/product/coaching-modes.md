@@ -134,7 +134,7 @@ Modes are chosen at game creation and can be switched mid-game (`update_game_set
 review at any point, in any mode, and the coach answers from checked facts. So "hints when asked" or
 "review when asked" aren't modes. `hints` gives the first hint before the human moves whenever they
 have a chance or a threat; and every mode, `play` included, offers a short review of the key moments
-when the game ends, rather than a separate review mode.
+when a game with a human in it ends, rather than a separate review mode.
 
 ## Experiences that are hard to get elsewhere
 

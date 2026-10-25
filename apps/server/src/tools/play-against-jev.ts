@@ -31,19 +31,17 @@ export function registerPlayAgainstJev(server: McpServer, { store, jev }: ToolDe
       _meta: SHOWS_BOARD,
     },
     ({ gameId, ply, move }) =>
-      handle(server, store, gameId, async () =>
-        gameResult(
-          await changeGame(store, gameId, ply, (game) => {
-            if (!hasJev(game)) {
-              throw new ChessError(
-                'wrong_tool',
-                'This game is not against Jev: use submit_human_move.',
-              );
-            }
-            return playJevReply(applyMove(game, move, 'human'), jev);
-          }),
-          { afterMove: true },
-        ),
-      ),
+      handle(server, store, gameId, async () => {
+        const { game, ended } = await changeGame(store, gameId, ply, (g) => {
+          if (!hasJev(g)) {
+            throw new ChessError(
+              'wrong_tool',
+              'This game is not against Jev: use submit_human_move.',
+            );
+          }
+          return playJevReply(applyMove(g, move, 'human'), jev);
+        });
+        return gameResult(game, { afterMove: true, ended });
+      }),
   );
 }

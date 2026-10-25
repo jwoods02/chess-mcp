@@ -26,10 +26,11 @@ export function registerUndoMove(server: McpServer, { store, jev }: ToolDeps) {
       _meta: SHOWS_BOARD,
     },
     ({ gameId, ply, plies }) =>
-      handle(server, store, gameId, async () =>
-        gameResult(
-          await changeGame(store, gameId, ply, (game) => playJevReply(undo(game, plies), jev)),
-        ),
-      ),
+      handle(server, store, gameId, async () => {
+        const { game, ended } = await changeGame(store, gameId, ply, (g) =>
+          playJevReply(undo(g, plies), jev),
+        );
+        return gameResult(game, { ended });
+      }),
   );
 }

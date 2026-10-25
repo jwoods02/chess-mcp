@@ -61,6 +61,16 @@ test("facts follow the human's move through the opponent's reply, then stop", ()
   expect(humanMoveFacts(createGame({ white: 'llm', black: 'human' }))).toBeUndefined();
 });
 
+test('position facts say how the game ended, with nothing else to find', () => {
+  expect(positionFacts(play('f3', 'e5', 'g4', 'Qh4#'))).toEqual({
+    toMove: 'White',
+    inCheck: true,
+    over: 'checkmate',
+    mateInOne: [],
+    underAttack: [],
+  });
+});
+
 test('position facts: mates, the best capture and pieces under attack for the side to move', () => {
   expect(positionFacts(play(...MATE_ON_H7)).mateInOne).toEqual(['Qxh7#']);
   expect(positionFacts(play('e4', 'e5', 'Nf3', 'Qg5')).bestCapture).toEqual({

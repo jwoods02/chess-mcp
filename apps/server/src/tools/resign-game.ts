@@ -18,8 +18,9 @@ export function registerResignGame(server: McpServer, { store }: ToolDeps) {
       outputSchema: GameView,
     },
     ({ gameId, ply, color }) =>
-      handle(server, store, gameId, async () =>
-        gameResult(await changeGame(store, gameId, ply, (game) => resign(game, color))),
-      ),
+      handle(server, store, gameId, async () => {
+        const { game, ended } = await changeGame(store, gameId, ply, (g) => resign(g, color));
+        return gameResult(game, { ended });
+      }),
   );
 }

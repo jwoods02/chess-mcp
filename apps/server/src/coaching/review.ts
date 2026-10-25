@@ -15,6 +15,16 @@ export function reviewReason(keyMoments: KeyMoment[]): string {
         "they're curious about.";
 }
 
+/**
+ * Stores the key moments on a game that has just ended, so later results don't redo the analysis. A
+ * game with no human in it has no one to review it with.
+ */
+export function withKeyMoments(game: Game): Game {
+  if (game.status !== 'finished' || game.keyMoments) return game;
+  if (game.white !== 'human' && game.black !== 'human') return game;
+  return { ...game, keyMoments: findKeyMoments(game) };
+}
+
 /** The human's moves that mattered most: missed or allowed mates first, then the biggest losses. */
 export function findKeyMoments(game: Game): KeyMoment[] {
   const moments: { index: number; weight: number; reason: string }[] = [];

@@ -94,6 +94,8 @@ export function factsText(facts: MoveFacts): string {
 
 /** What the side to move can do, as one line. */
 export function positionText(facts: PositionFacts): string {
+  if (facts.over === 'checkmate') return `${facts.toMove} is checkmated, so the game is over`;
+  if (facts.over) return `the game is drawn by ${facts.over.replace(/_/g, ' ')}`;
   const parts = [`${facts.toMove} to move${facts.inCheck ? ', in check' : ''}`];
   if (facts.mateInOne.length) parts.push(`mate in one: ${facts.mateInOne.join(', ')}`);
   if (facts.bestCapture) {

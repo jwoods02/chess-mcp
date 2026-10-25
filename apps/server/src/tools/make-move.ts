@@ -27,13 +27,11 @@ export function registerMakeMove(server: McpServer, { store, jev }: ToolDeps) {
       _meta: SHOWS_BOARD,
     },
     ({ gameId, ply, move }) =>
-      handle(server, store, gameId, async () =>
-        gameResult(
-          await changeGame(store, gameId, ply, (game) =>
-            playJevReply(applyMove(game, move, 'llm'), jev),
-          ),
-          { afterMove: true },
-        ),
-      ),
+      handle(server, store, gameId, async () => {
+        const { game, ended } = await changeGame(store, gameId, ply, (g) =>
+          playJevReply(applyMove(g, move, 'llm'), jev),
+        );
+        return gameResult(game, { afterMove: true, ended });
+      }),
   );
 }

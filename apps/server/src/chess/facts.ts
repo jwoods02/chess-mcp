@@ -1,6 +1,6 @@
 import type { MoveFacts, PositionFacts } from '@chess-mcp/shared';
 import { Chess, type Square } from 'chess.js';
-import { replay, type Game } from './game.ts';
+import { ending, replay, type Game } from './game.ts';
 
 // Pawns. The king's value only matters for picking the cheapest capturer, and it captures last.
 const VALUE: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 100 };
@@ -55,13 +55,27 @@ export function moveFacts(game: Game, index: number): MoveFacts {
   };
 }
 
-/** What the side to move can do now: mates in one, its best capture, and its pieces under attack. */
+/**
+ * What the side to move can do now: mates in one, its best capture, and its pieces under attack. In a
+ * checkmate or a draw there's nothing to find, so it says how the game ended instead.
+ */
 export function positionFacts(game: Game): PositionFacts {
   const chess = replay(game);
   const side = chess.turn();
+  const toMove = side === 'w' ? 'White' : 'Black';
+  const over = ending(chess);
+  if (over) {
+    return {
+      toMove,
+      inCheck: chess.inCheck(),
+      over: over.termination,
+      mateInOne: [],
+      underAttack: [],
+    };
+  }
   const best = bestCapture(chess);
   return {
-    toMove: side === 'w' ? 'White' : 'Black',
+    toMove,
     inCheck: chess.inCheck(),
     mateInOne: mates(chess),
     ...(best && { bestCapture: best }),
@@ -84,22 +98,24 @@ function passTurn(chess: Chess): Chess {
  * pinned piece can't capture.
  */
 function exchangeGain(chess: Chess, square: Square): number {
-  const captures = chess
-    .moves({ verbose: true })
-    .filter((m) => m.to === square && m.captured && !m.isEnPassant());
-  if (captures.length === 0) return 0;
-  const cheapest = captures.reduce((a, b) => (VALUE[b.piece]! < VALUE[a.piece]! ? b : a));
-  chess.move(cheapest);
-  const gain = VALUE[cheapest.captured!]! - exchangeGain(chess, square);
+  const options = captures(chess).filter((c) => c.to === square);
+  if (options.length === 0) return 0;
+  const cheapest = options.reduce((a, b) => (VALUE[b.piece]! < VALUE[a.piece]! ? b : a));
+  chess.move(cheapest.san);
+  const gain = VALUE[cheapest.captured]! - exchangeGain(chess, square);
   chess.undo();
   return Math.max(0, gain);
 }
 
 /** Pieces of `color` (not on the move) that the side to move can win. */
 function hangingPieces(chess: Chess, color: string): MoveFacts['hanging'] {
+  // Working out an exchange is slow, so only try the squares the side to move can capture on.
+  const attacked = new Set(captures(chess).map((c) => c.to));
   const hanging: MoveFacts['hanging'] = [];
   for (const piece of chess.board().flat()) {
-    if (!piece || piece.color !== color || piece.type === 'k') continue;
+    if (!piece || piece.color !== color || piece.type === 'k' || !attacked.has(piece.square)) {
+      continue;
+    }
     const loses = exchangeGain(chess, piece.square);
     if (loses > 0) hanging.push({ piece: NAME[piece.type]!, square: piece.square, loses });
   }
@@ -109,14 +125,29 @@ function hangingPieces(chess: Chess, color: string): MoveFacts['hanging'] {
 /** The capture that wins the most material for the side to move, if any wins something. */
 function bestCapture(chess: Chess): { move: string; wins: number } | undefined {
   let best: { move: string; wins: number } | undefined;
-  for (const m of chess.moves({ verbose: true })) {
-    if (!m.captured) continue;
-    chess.move(m);
-    const wins = VALUE[m.captured]! - exchangeGain(chess, m.to);
+  for (const c of captures(chess)) {
+    chess.move(c.san);
+    const wins = VALUE[c.captured]! - exchangeGain(chess, c.to);
     chess.undo();
-    if (wins > 0 && (!best || wins > best.wins)) best = { move: m.san, wins };
+    if (wins > 0 && (!best || wins > best.wins)) best = { move: c.san, wins };
   }
   return best;
+}
+
+/**
+ * The side to move's captures, read from SAN because chess.js builds verbose moves about ten times
+ * slower. En passant is left out: the pawn it takes isn't on the square it moves to.
+ */
+function captures(chess: Chess): { san: string; to: Square; piece: string; captured: string }[] {
+  const found = [];
+  for (const san of chess.moves()) {
+    const to = /x([a-h][1-8])/.exec(san)?.[1] as Square | undefined;
+    const target = to && chess.get(to);
+    if (!to || !target) continue;
+    const piece = /^[NBRQK]/.test(san) ? san[0]!.toLowerCase() : 'p';
+    found.push({ san, to, piece, captured: target.type });
+  }
+  return found;
 }
 
 function mates(chess: Chess): string[] {

@@ -30,7 +30,7 @@ export function registerSubmitHumanMove(server: McpServer, { store }: ToolDeps) 
     },
     ({ gameId, ply, move }) =>
       handle(server, store, gameId, async () => {
-        const game = await changeGame(store, gameId, ply, (g) => {
+        const { game, ended } = await changeGame(store, gameId, ply, (g) => {
           if (hasJev(g)) {
             throw new ChessError(
               'wrong_tool',
@@ -45,6 +45,7 @@ export function registerSubmitHumanMove(server: McpServer, { store }: ToolDeps) 
         const humanMustSee = view.status === 'finished' || view.toMove === 'human';
         return gameResult(game, {
           afterMove: true,
+          ended,
           note: humanMustSee
             ? 'The human has not seen this position: call get_game to show them the board.'
             : undefined,

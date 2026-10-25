@@ -1,4 +1,12 @@
-import type { Color, GameState, Level, Player, Result, Termination } from '@chess-mcp/shared';
+import type {
+  Color,
+  GameState,
+  KeyMoment,
+  Level,
+  Player,
+  Result,
+  Termination,
+} from '@chess-mcp/shared';
 import { Chess, DEFAULT_POSITION, validateFen, type Square } from 'chess.js';
 
 export interface Game {
@@ -15,6 +23,8 @@ export interface Game {
   coachingMode?: string;
   /** How strongly the non-human side plays. Defaults to 'best'. */
   opponentLevel?: Level;
+  /** The human's moves worth reviewing, worked out once when the game ends: it analyses every move. */
+  keyMoments?: KeyMoment[];
   createdAt: string;
   updatedAt: string;
 }
@@ -156,6 +166,7 @@ export function undo(game: Game, plies: number): Game {
     result: undefined,
     termination: undefined,
     drawOffer: undefined,
+    keyMoments: undefined,
   };
   return withStatus(reverted, replay(reverted));
 }
@@ -262,6 +273,22 @@ export function moveText(pgn: string): string {
     .replace(/\s*(\*|1-0|0-1|1\/2-1\/2)$/, '');
 }
 
+/** How the game ends in this position, if it's checkmate or a draw. Needs the history for repetition. */
+export function ending(chess: Chess): { result: Result; termination: Termination } | undefined {
+  if (chess.isCheckmate()) {
+    return { result: chess.turn() === 'w' ? '0-1' : '1-0', termination: 'checkmate' };
+  }
+  if (chess.isStalemate()) return { result: '1/2-1/2', termination: 'stalemate' };
+  if (chess.isInsufficientMaterial()) {
+    return { result: '1/2-1/2', termination: 'insufficient_material' };
+  }
+  if (chess.isThreefoldRepetition()) {
+    return { result: '1/2-1/2', termination: 'threefold_repetition' };
+  }
+  if (chess.isDrawByFiftyMoves()) return { result: '1/2-1/2', termination: 'fifty_move' };
+  return undefined;
+}
+
 export function seat(game: Game, color: Color): Player {
   return color === 'w' ? game.white : game.black;
 }
@@ -309,12 +336,8 @@ function finish(game: Game, result: Result, termination: Termination): Game {
 
 /** Ends the game if the position on the board is checkmate or a draw. */
 function withStatus(game: Game, chess: Chess): Game {
-  if (chess.isCheckmate()) return finish(game, chess.turn() === 'w' ? '0-1' : '1-0', 'checkmate');
-  if (chess.isStalemate()) return finish(game, '1/2-1/2', 'stalemate');
-  if (chess.isInsufficientMaterial()) return finish(game, '1/2-1/2', 'insufficient_material');
-  if (chess.isThreefoldRepetition()) return finish(game, '1/2-1/2', 'threefold_repetition');
-  if (chess.isDrawByFiftyMoves()) return finish(game, '1/2-1/2', 'fifty_move');
-  return touch(game);
+  const over = ending(chess);
+  return over ? finish(game, over.result, over.termination) : touch(game);
 }
 
 function parseUci(input: string) {

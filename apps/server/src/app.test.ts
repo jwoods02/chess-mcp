@@ -258,6 +258,24 @@ describe('coaching', () => {
     expect(illegal.content[0]!.text).toContain('Error [illegal_move]');
   });
 
+  test("analyze_position gives each move of a line its own facts, and says when it's mate", async () => {
+    const start = await callTool('new_game', { white: 'human', black: 'llm' });
+    const { gameId } = start.structuredContent;
+    const trade = (await callTool('analyze_position', { gameId, moves: ['e4', 'd5', 'exd5'] }))
+      .structuredContent as unknown as { line: MoveFacts[] };
+    // Material after each move itself, not after the move that follows it in the line.
+    expect(trade.line.map((m) => [m.move, m.material, m.reply])).toEqual([
+      ['e4', 'level', undefined],
+      ['d5', 'level', undefined],
+      ['exd5', 'White is up 1 point', undefined],
+    ]);
+
+    const mate = await callTool('analyze_position', { gameId, moves: ['f3', 'e5', 'g4', 'Qh4#'] });
+    const { after } = mate.structuredContent as unknown as { after: PositionFacts };
+    expect(after).toMatchObject({ over: 'checkmate', mateInOne: [] });
+    expect(mate.content[0]!.text).toContain('After the line: White is checkmated');
+  });
+
   test('every mode offers a review of the key moments when the game ends', async () => {
     const start = await callTool('new_game', { white: 'human', black: 'llm' });
     const { gameId } = start.structuredContent;
@@ -266,12 +284,29 @@ describe('coaching', () => {
     await callTool('submit_human_move', { gameId, ply: 2, move: 'g4' });
 
     const over = await callTool('make_move', { gameId, ply: 3, move: 'Qh4#' });
+    const keyMoments = [{ move: '2. g4', reason: 'allowed mate in one: Qh4#' }];
     expect(over.structuredContent.coaching).toMatchObject({
       mode: 'play@1',
       speak: true,
-      keyMoments: [{ move: '2. g4', reason: 'allowed mate in one: Qh4#' }],
+      keyMoments,
     });
     expect(over.structuredContent.coaching.reason).toContain('Offer to go through');
+
+    // The offer comes once, with the move that ended the game; the moments stay for later.
+    const later = await callTool('get_game', { gameId });
+    expect(later.structuredContent.coaching).toMatchObject({ speak: false, keyMoments });
+  });
+
+  test('a game with no human in it ends without a review', async () => {
+    const start = await callTool('new_game', { white: 'llm', black: 'llm' });
+    const { gameId } = start.structuredContent;
+    let result = start;
+    for (const [ply, move] of ['f3', 'e5', 'g4', 'Qh4#'].entries()) {
+      result = await callTool('make_move', { gameId, ply, move });
+    }
+    expect(result.structuredContent.status).toBe('finished');
+    expect(result.structuredContent.coaching.speak).toBe(false);
+    expect(result.structuredContent.coaching.keyMoments).toBeUndefined();
   });
 
   test('hints nudges the human, unprompted, when they have a chance on their move', async () => {

@@ -107,6 +107,9 @@ export type MoveFacts = z.infer<typeof MoveFacts>;
 export const PositionFacts = z.object({
   toMove: z.enum(['White', 'Black']),
   inCheck: z.boolean(),
+  over: Termination.optional().describe(
+    'Set when the position is checkmate or a draw; the other facts are then empty',
+  ),
   mateInOne: z.array(z.string()).describe('Mates in one for the side to move'),
   bestCapture: z
     .object({ move: z.string(), wins: z.number() })

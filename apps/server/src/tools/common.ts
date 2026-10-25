@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { clientShowsBoard } from '../board-ui.ts';
 import { ChessError, toState, type Game } from '../chess/game.ts';
 import { coachingBlock, MODE_IDS, MODES } from '../coaching/coaching.ts';
+import { withKeyMoments } from '../coaching/review.ts';
 import { LEVELS } from '../opponents/levels.ts';
 import { gameText, gameView } from '../chess/text.ts';
 import type { Opponent } from '../opponents/opponent.ts';
@@ -44,11 +45,12 @@ export const levelInput = Level.describe(
  * A successful result: the text response plus the GameView as structured content. Both carry the
  * board, the next step and the coaching, since some clients show the model only one of them. Ask for
  * `fullGuidance` when the model may not know the game's coaching yet: a start, resume or change.
- * Move tools pass `afterMove`, so the coaching includes facts about the move just played.
+ * Move tools pass `afterMove`, so the coaching includes facts about the move just played, and tools
+ * pass `ended` from changeGame, so the result that ends the game offers a review.
  */
 export function gameResult(
   game: Game,
-  options: { note?: string; fullGuidance?: boolean; afterMove?: boolean } = {},
+  options: { note?: string; fullGuidance?: boolean; afterMove?: boolean; ended?: boolean } = {},
 ): CallToolResult {
   const view = gameView(toState(game), coachingBlock(game, options), options.note);
   return { content: [{ type: 'text', text: gameText(view) }], structuredContent: view };
@@ -60,20 +62,23 @@ export async function loadGame(store: GameStore, gameId: string): Promise<Game> 
   return game;
 }
 
-/** Loads a game, checks the caller saw the latest position, applies `change` and saves it. */
+/**
+ * Loads a game, checks the caller saw the latest position, applies `change` and saves it. `ended` says
+ * the change finished the game; its key moments are worked out then and stored with it.
+ */
 export async function changeGame(
   store: GameStore,
   gameId: string,
   ply: number,
   change: (game: Game) => Game | Promise<Game>,
-): Promise<Game> {
+): Promise<{ game: Game; ended: boolean }> {
   const game = await loadGame(store, gameId);
   if (game.moves.length !== ply) throw staleError(game.moves.length, ply);
   // May await Jev's reply. The save only succeeds if the stored game is still the one we loaded,
   // so a resignation or move that lands meanwhile isn't overwritten.
-  const changed = await change(game);
+  const changed = withKeyMoments(await change(game));
   if (!(await store.update(changed, game))) throw staleError(undefined, ply);
-  return changed;
+  return { game: changed, ended: game.status === 'active' && changed.status === 'finished' };
 }
 
 /**

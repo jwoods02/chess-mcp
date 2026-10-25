@@ -26,13 +26,14 @@ export const hints: CoachingMode = {
     if (position.mateInOne.length > 0) {
       return `The human has mate in one: ${position.mateInOne.join(' or ')}.`;
     }
+    // Hint at whichever matters more: a free queen beats saving a knight. On a tie, defend first.
     const threat = position.underAttack.find((h) => h.loses >= MIN_POINTS);
+    const win = position.bestCapture;
+    if (win && win.wins >= MIN_POINTS && win.wins > (threat?.loses ?? 0)) {
+      return `The human can win material: ${win.move} wins ${win.wins} points.`;
+    }
     if (threat) {
       return `The human's ${threat.piece} on ${threat.square} is under attack (${threat.loses} points).`;
-    }
-    const win = position.bestCapture;
-    if (win && win.wins >= MIN_POINTS) {
-      return `The human can win material: ${win.move} wins ${win.wins} points.`;
     }
     return undefined;
   },

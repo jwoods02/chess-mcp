@@ -115,6 +115,7 @@ interface Game {
   drawOffer?: Color; // a pending draw offer made by this side
   coachingMode?: string; // e.g. 'blunder_check@1'; games without one play as 'play@1'
   opponentLevel?: Level; // 'beginner' | 'casual' | 'club' | 'best' (default) for the non-human seats
+  keyMoments?: KeyMoment[]; // stored when a game with a human ends; cleared by an undo
   createdAt: string;
   updatedAt: string;
 }
@@ -570,7 +571,8 @@ interface MoveFacts {
 - **Built:** `play` (never speaks); `blunder_check@2` (speaks when the human's move loses at least
   two points of material, allows a mate in one or misses one; a missed mate after a capture credits the
   capture first); and `hints` (speaks before the human's move when `positionFacts` show a mate in one,
-  a piece of theirs under attack or a winning capture, worth at least two points). A mode must change
+  a piece of theirs under attack or a winning capture, worth at least two points; between a threat and
+  a capture it hints at whichever is worth more). A mode must change
   what the coach does unprompted: help and reviews on request work in every mode.
 - **Layered guidance** ([why](./product/coaching-modes.md#keeping-the-model-on-track)): the server
   instructions carry a standing rule; every result carries `coaching.summary` and, on the LLM's move,
@@ -587,12 +589,17 @@ interface MoveFacts {
   pinned attacker doesn't make a piece look hanging (a playtest false alarm). An engine can add
   evaluation later without changing the modes.
 - **`analyze_position`** is the LLM's calculator: `positionFacts` for the side to move (mates in one,
-  the best capture, its pieces under attack, found by passing the move in a scratch copy) and, for a
-  line of moves, `moveFacts` per move on a scratch copy (`previewLine`). It's read-only, so it takes no
-  `ply` and draws no board.
-- **Review at the end, in every mode** (`coaching/review.ts`): when the game is over, the block lists up
-  to three `keyMoments` from the human's moves (missed or allowed mates first, then the biggest losses
-  and missed wins) and the coach offers to go through them.
+  the best capture, its pieces under attack, found by passing the move in a scratch copy; or `over`
+  when the position is checkmate or a draw) and, for a line of moves, `moveFacts` per move on a scratch
+  copy (`previewLine`), each judged at that move with no reply folded in. It's read-only, so it takes
+  no `ply` and draws no board.
+- **Speed.** Facts use a static exchange per attacked square, and read captures from SAN moves:
+  chess.js builds verbose moves about ten times slower. A move's facts take under 10 ms.
+- **Review at the end, in every mode** (`coaching/review.ts`): when a game with a human in it ends,
+  `changeGame` works out up to three `keyMoments` from the human's moves (missed or allowed mates
+  first, then the biggest losses and missed wins) and stores them on the game, since that analyses
+  every move. The result that ended the game asks the coach to offer going through them; later results
+  still carry them. An undo clears them.
 - **Coach after the move, never block it.** On some paths the board has already played the move before
   the LLM hears about it, so a mode offers a takeback (`undo_move`) rather than an "are you sure?"
   prompt. This keeps coaching the same on every path.
