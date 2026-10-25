@@ -67,7 +67,7 @@ pnpm install
 pnpm dev          # builds the board UI in watch mode + runs the server on http://localhost:3000/mcp
 ```
 
-- SQLite file at `./data/chess.db` (created on first run; path via `DATABASE_PATH`).
+- SQLite file at `apps/server/data/chess.db` (created on first run; override with `DATABASE_PATH`).
 - Connect from Claude Code with `claude mcp add --transport http chess http://localhost:3000/mcp`,
   or use the ext-apps `basic-host` example or MCP Inspector to see the board UI.
 - No deployment for now. Because it's plain Node and HTTP, deploying later means a container plus a
@@ -144,7 +144,8 @@ repetition, and it's trivially cheap. The current FEN is derived, not stored.
 
 - `offer`: `color` offers a draw, which sets `drawOffer`. Allowed any time the game is active.
 - `accept` / `decline`: only the _other_ side can respond, and only while an offer is pending.
-  Accepting ends the game `1/2-1/2` (`draw_agreed`). Declining clears the offer.
+  Accepting ends the game `1/2-1/2` (`draw_agreed`). Declining clears the offer. Offering while the
+  opponent's offer is pending counts as accepting it.
 - As in over-the-board chess, a move by the side the offer was made to declines it. The usual flow is
   to make your move, then offer.
 - The server trusts the caller about who is acting. When the human is offering or accepting, the
@@ -281,7 +282,8 @@ ASCII letters (more reliable for models than Unicode glyphs), flipped when the h
 ### Error codes
 
 `game_not_found`, `game_over`, `illegal_move` (includes the legal moves), `stale_state` (includes
-the current view), `invalid_fen`, `invalid_draw_action` (e.g. accepting when no offer is pending).
+the current view), `invalid_fen`, `invalid_undo` (nothing to take back), `invalid_draw_action` (e.g.
+accepting when no offer is pending).
 
 ### Later tools (sketch)
 

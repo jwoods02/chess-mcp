@@ -1,28 +1,25 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer } from '@modelcontextprotocol/server';
+import { registerBoardUi } from './board-ui.ts';
+import type { GameStore } from './store/store.ts';
+import { registerDrawOffer } from './tools/draw-offer.ts';
+import { registerGetGame } from './tools/get-game.ts';
+import { registerLegalMoves } from './tools/legal-moves.ts';
+import { registerMakeMove } from './tools/make-move.ts';
+import { registerNewGame } from './tools/new-game.ts';
+import { registerResignGame } from './tools/resign-game.ts';
+import { registerUndoMove } from './tools/undo-move.ts';
 
-export const BOARD_URI = 'ui://chess/board.html';
-
-// Single-file build of packages/board-app (run `pnpm build` first). Read lazily so the server
-// still starts if the UI hasn't been built yet.
-const boardHtmlPath = fileURLToPath(import.meta.resolve('@chess-mcp/board-app/index.html'));
-
-export function buildMcpServer() {
+export function buildMcpServer(store: GameStore) {
   const server = new McpServer({ name: 'chess-mcp', version: '0.0.0' });
 
-  registerAppResource(
-    server,
-    'Chess board',
-    BOARD_URI,
-    { mimeType: RESOURCE_MIME_TYPE },
-    async () => ({
-      contents: [
-        { uri: BOARD_URI, mimeType: RESOURCE_MIME_TYPE, text: readFileSync(boardHtmlPath, 'utf8') },
-      ],
-    }),
-  );
+  registerBoardUi(server);
+  registerNewGame(server, store);
+  registerGetGame(server, store);
+  registerMakeMove(server, store);
+  registerLegalMoves(server, store);
+  registerUndoMove(server, store);
+  registerResignGame(server, store);
+  registerDrawOffer(server, store);
 
   return server;
 }

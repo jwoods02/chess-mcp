@@ -2,10 +2,11 @@ import { createMcpHonoApp } from '@modelcontextprotocol/hono';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import type { Context } from 'hono';
 import { buildMcpServer } from './mcp.ts';
+import type { GameStore } from './store/store.ts';
 
-export function createApp() {
-  // Stateless: a fresh McpServer per request. Game state will live in the database.
-  const mcp = createMcpHandler(buildMcpServer);
+export function createApp(store: GameStore) {
+  // Stateless: a fresh McpServer per request. Games live in the store, keyed by ID.
+  const mcp = createMcpHandler(() => buildMcpServer(store));
 
   // createMcpHonoApp adds JSON body parsing and localhost Host/Origin validation.
   const app = createMcpHonoApp();
