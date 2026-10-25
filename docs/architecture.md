@@ -112,6 +112,7 @@ interface Game {
     | 'insufficient_material'
     | 'resignation'
     | 'draw_agreed';
+  drawOffer?: Color; // a pending draw offer made by this side
   coachingMode?: string; // M5, e.g. 'socratic@1'
   createdAt: string;
   updatedAt: string;
@@ -120,7 +121,7 @@ interface Game {
 interface Move {
   san: string; // 'Nf3'
   uci: string; // 'g1f3'
-  by: Player;
+  by: Player; // derived from the seat that moved; callers don't pass it
   meta?: Record<string, unknown>; // e.g. Jev's move probabilities (M3)
 }
 ```
@@ -132,11 +133,22 @@ repetition, and it's trivially cheap. The current FEN is derived, not stored.
 `chess/game.ts` holds a handful of plain functions, with no classes or service layers:
 
 - `createGame({ white, black, startFen? }) → Game`
-- `applyMove(game, input, by) → Game`: accepts SAN (`Nf3`), UCI (`g1f3`, `e7e8q`) and loose forms
-  (`nf3`, `0-0`). It throws a `ChessError` with a `code` on anything illegal, and sets
-  status/result/termination when the game ends.
-- `undo(game, plies)`, `endGame(game, reason, color?)`
+- `applyMove(game, input) → Game`: plays a move for the side to move. It accepts SAN (`Nf3`), UCI
+  (`g1f3`, `e7e8q`) and loose forms (`nf3`, `0-0`). Promotions must name the piece. It throws a
+  `ChessError` with a `code` on anything illegal, and sets status/result/termination when the game
+  ends. Threefold repetition and the 50-move rule end the game automatically, as chess.js does.
+- `undo(game, plies)`, `resign(game, color)`, `draw(game, action, color)`
 - `toView(game) → GameView`
+
+### Draw offers
+
+- `offer`: `color` offers a draw, which sets `drawOffer`. Allowed any time the game is active.
+- `accept` / `decline`: only the _other_ side can respond, and only while an offer is pending.
+  Accepting ends the game `1/2-1/2` (`draw_agreed`). Declining clears the offer.
+- As in over-the-board chess, a move by the side the offer was made to declines it. The usual flow is
+  to make your move, then offer.
+- The server trusts the caller about who is acting. When the human is offering or accepting, the
+  model is expected to have asked them.
 
 ### Staleness and concurrency: the `ply` guard
 
@@ -144,14 +156,15 @@ The model and the board UI can both act on a game, and either might be looking a
 One mechanism covers both cases:
 
 - `ply` is the number of half-moves played (`moves.length`, 0 at the start). Every response includes it.
-- Every tool that changes a game (`chess_make_move`, `chess_undo_move`, `chess_end_game`) **requires**
+- Every tool that changes a game (`make_move`, `undo_move`, `resign_game`, `draw_offer`) **requires**
   the `ply` the caller last saw. If it doesn't match the game, nothing changes and the call returns
   `stale_state` with the current board. The model is never surprised by a move it didn't see.
 - The database write is conditional on the same number (`UPDATE … WHERE id = ? AND ply = ?`). If two
   requests race, for example while a Jev call is in flight, the second write affects no rows and also
   returns `stale_state`.
 
-We say "ply", not "move number", because in chess notation "move 1" covers both `e4` and `e5`.
+"Ply" is the standard chess-programming term for a half-move (engines and the Lichess API use it). We
+avoid "move number" because in chess notation "move 1" covers both `e4` and `e5`.
 
 ## Storage
 
@@ -185,7 +198,9 @@ code. We'll add columns or tables when a real query needs them.
 
 ### Conventions
 
-- Tool names are `chess_<verb>` / `chess_<verb>_<noun>`.
+- Tool names are `<verb>_<noun>` (`make_move`), with no `chess_` prefix. Clients already namespace
+  tools by server. Each name must still make sense on its own (`draw_offer`, not `draw`), and every
+  description says it's about chess.
 - Every tool has an `inputSchema` and an `outputSchema` (zod, from `packages/shared`).
 - Every result returns **both**:
   - `content`: a complete text response with the board, FEN, moves, last move, status and what
@@ -197,6 +212,9 @@ code. We'll add columns or tables when a real query needs them.
   latest tool result."_
 
 ### GameView
+
+`GameView` is what the **server returns** in every tool result. The model reads it (as text and as
+structured data) and so does the board UI. The model only ever sends tool inputs.
 
 ```ts
 interface GameView {
@@ -213,6 +231,7 @@ interface GameView {
   result?: string;
   termination?: string;
   inCheck: boolean;
+  drawOffer?: Color; // pending draw offer from this side
   lastMove?: { san: string; from: string; to: string; by: Player };
   orientation: Color; // board orientation for the UI: the human's colour
   coaching?: CoachingBlock; // M5
@@ -238,39 +257,41 @@ Game 3f2c…  ·  You (White) vs Claude (Black)
 FEN: rnbqkb1r/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2
 Moves: 1. e4 e5 2. Nf3
 Last move: Nf3 (human)
-Status: Black to move. It's your (Claude's) turn: call chess_make_move.
+Draw offer: none (this line only appears when an offer is pending)
+Status: Black to move. It's your (Claude's) turn: call make_move.
 ```
 
 ASCII letters (more reliable for models than Unicode glyphs), flipped when the human plays Black.
 
 ### M1 tools
 
-| Tool                | Input                                                             | Notes                                                                                   |
-| ------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `chess_new_game`    | `{ white: Player, black: Player, startFen? }`                     | Returns a new UUID. Shows the board.                                                    |
-| `chess_get_game`    | `{ gameId }`                                                      | Shows the board.                                                                        |
-| `chess_make_move`   | `{ gameId, ply, move, by: 'human' \| 'llm' }`                     | Shows the board. `by` must match the seat to move. Visible to the model **and** the UI. |
-| `chess_legal_moves` | `{ gameId, square? }`                                             | SAN list, optionally for one piece.                                                     |
-| `chess_undo_move`   | `{ gameId, ply, plies?: number }`                                 | Default 2 (back to the human's turn).                                                   |
-| `chess_end_game`    | `{ gameId, ply, reason: 'resignation' \| 'draw_agreed', color? }` | `color` = who resigned.                                                                 |
+| Tool          | Input                                                              | Notes                                                                             |
+| ------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `new_game`    | `{ white: Player, black: Player, startFen? }`                      | Returns a new UUID. Shows the board.                                              |
+| `get_game`    | `{ gameId }`                                                       | Shows the board.                                                                  |
+| `make_move`   | `{ gameId, ply, move }`                                            | Plays for the side to move. Shows the board. Visible to the model **and** the UI. |
+| `legal_moves` | `{ gameId, square? }`                                              | SAN list, optionally for one piece.                                               |
+| `undo_move`   | `{ gameId, ply, plies?: number }`                                  | Default 2 (back to the human's turn). Shows the board.                            |
+| `resign_game` | `{ gameId, ply, color }`                                           | `color` = the side resigning. Shows the board.                                    |
+| `draw_offer`  | `{ gameId, ply, action: 'offer' \| 'accept' \| 'decline', color }` | `color` = the side acting. See [Draw offers](#draw-offers). Shows the board.      |
 
 `ply` is the guard described in [Staleness and concurrency](#staleness-and-concurrency-the-ply-guard).
 "Shows the board" means the tool is linked to the board UI (`_meta.ui.resourceUri`).
 
 ### Error codes
 
-`game_not_found`, `game_over`, `not_your_turn`, `illegal_move` (includes the legal moves),
-`stale_state` (includes the current view), `invalid_fen`.
+`game_not_found`, `game_over`, `illegal_move` (includes the legal moves), `stale_state` (includes
+the current view), `invalid_fen`, `invalid_draw_action` (e.g. accepting when no offer is pending).
 
 ### Later tools (sketch)
 
-| Milestone | Tool                       | Purpose                                                                                                                                                                                                                                                     |
-| --------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M3        | `chess_engine_opinion`     | `{ gameId }`: Jev's move probabilities for the current position, without playing. Useful for coaching.                                                                                                                                                      |
-| M4        | `chess_build_position`     | `{ pieces: { square, piece, color }[], sideToMove }` or `{ fen }` returns a valid FEN or a list of problems (missing king, pawn on the back rank, side not to move in check…). LLMs are unreliable at writing FENs, so this is how they "describe a board". |
-| M4        | `chess_create_puzzle`      | `{ fen, prompt, solution?: string[], hints?: string[] }`. Validates that the solution is legal. Shows the board.                                                                                                                                            |
-| M4        | `chess_submit_puzzle_move` | `{ puzzleId, move }` returns `{ legal, verdict: 'correct' \| 'incorrect' \| 'open' }` plus coaching. `open` = no fixed solution, so the LLM judges.                                                                                                         |
-| M5        | `chess_set_coaching_mode`  | `{ gameId, mode }`                                                                                                                                                                                                                                          |
+| Milestone | Tool                 | Purpose                                                                                                                                                                                                                                                     |
+| --------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M3        | `engine_opinion`     | `{ gameId }`: Jev's move probabilities for the current position, without playing. Useful for coaching.                                                                                                                                                      |
+| M4        | `build_position`     | `{ pieces: { square, piece, color }[], sideToMove }` or `{ fen }` returns a valid FEN or a list of problems (missing king, pawn on the back rank, side not to move in check…). LLMs are unreliable at writing FENs, so this is how they "describe a board". |
+| M4        | `create_puzzle`      | `{ fen, prompt, solution?: string[], hints?: string[] }`. Validates that the solution is legal. Shows the board.                                                                                                                                            |
+| M4        | `submit_puzzle_move` | `{ puzzleId, move }` returns `{ legal, verdict: 'correct' \| 'incorrect' \| 'open' }` plus coaching. `open` = no fixed solution, so the LLM judges.                                                                                                         |
+| M5        | `set_coaching_mode`  | `{ gameId, mode }`                                                                                                                                                                                                                                          |
 
 ## MCP App (board UI)
 
@@ -285,7 +306,7 @@ registerAppResource(server, BOARD_URI, BOARD_URI, { mimeType: RESOURCE_MIME_TYPE
 
 registerAppTool(
   server,
-  'chess_make_move',
+  'make_move',
   {
     description,
     inputSchema,
@@ -310,11 +331,11 @@ App connects → ontoolresult(result) → render(result.structuredContent as Gam
 - **M2 (display):** a board from `fen` in `orientation`, highlights for the last move and check, a move
   list and a status line. It follows the host light/dark theme.
 - **Stretch (human moves on the board):**
-  1. Drop a piece → `app.callServerTool({ name: 'chess_make_move', arguments: { gameId, ply, move, by: 'human' } })`.
+  1. Drop a piece → `app.callServerTool({ name: 'make_move', arguments: { gameId, ply, move } })`.
   2. Re-render from the returned view. If Jev replied, that move is already in it.
   3. Tell the model:
      - If the LLM is next to move → `app.sendMessage("I played Nf3")`. The model then calls
-       `chess_make_move` for its reply, and the host renders that result.
+       `make_move` for its reply, and the host renders that result.
      - Otherwise (Jev replied, or there's no LLM seat) → `app.updateModelContext(...)` with the new
        position, so the model stays informed without being forced to reply.
   4. On `stale_state`, re-render from the view returned with the error.
@@ -336,7 +357,7 @@ interface Opponent {
 
 - The server validates every returned move. On failure or timeout it retries once, then falls back to
   a random legal move (recorded in `meta`).
-- When `chess_make_move` leaves the turn with an engine seat, the server plays the engine's reply in
+- When `make_move` leaves the turn with an engine seat, the server plays the engine's reply in
   the same call and returns both moves.
 
 ### Jev
@@ -431,6 +452,6 @@ interface CoachingBlock {
 | 6   | Every tool returns full text **and** `structuredContent`                    | Text-only clients are first-class.                                                       |
 | 7   | Mutating tools require the `ply` the caller saw; DB write conditional on it | One mechanism stops stale views and racing writes. No separate version field.            |
 | 8   | React with `react-chessboard`                                               | MIT, inline SVG pieces, drag/drop for the stretch goal.                                  |
-| 9   | Engine replies are played inside `chess_make_move`                          | One call per human move. Simpler for the model and the UI.                               |
+| 9   | Engine replies are played inside `make_move`                                | One call per human move. Simpler for the model and the UI.                               |
 | 10  | No auth. Game UUIDs are the only identifier.                                | Out of scope for v1.                                                                     |
 | 11  | Local only, no deploy                                                       | Focus on the product first.                                                              |

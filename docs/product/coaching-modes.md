@@ -29,7 +29,7 @@ facts into dialogue that follows the mode's guidance. The server never writes co
 | `post_game_review` | No interruptions during play. At the end, the LLM walks through 3–5 key moments.                                                             |
 | `puzzle_coach`     | For puzzles. Reacts to the human's attempt, asks for their reasoning, then nudges or confirms.                                               |
 
-Modes can be selected at game creation and **switched mid-game** (`chess_set_coaching_mode`).
+Modes can be selected at game creation and **switched mid-game** (`set_coaching_mode`).
 
 ## Experimentation
 

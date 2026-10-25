@@ -18,7 +18,7 @@ The foundation: a human and an agent can play a complete, legal game of chess ov
 - After every move I see the board, the move list, whose turn it is and the game status (check,
   checkmate, stalemate, the draw rules).
 - I can come back to a game later in the same conversation and the agent can load it by ID.
-- I can resign, agree a draw, or take a move back.
+- I can resign, offer or accept a draw (either side can offer), or take a move back.
 
 **Done when**
 

@@ -54,7 +54,8 @@ Before finishing a change, run `pnpm typecheck && pnpm lint && pnpm format:check
   properties, so Node can strip the types. Relative imports use the `.ts` extension.
 - Use `pnpm` only. Add dependency versions to the `catalog:` in `pnpm-workspace.yaml` and reference
   them as `"catalog:"`.
-- Tool names are `chess_<verb>` / `chess_<verb>_<noun>`. Every tool defines zod `inputSchema` and
+- Tool names are `<verb>_<noun>` with no `chess_` prefix (clients namespace by server). Names must be
+  unambiguous on their own (`draw_offer`, not `draw`). Every tool defines zod `inputSchema` and
   `outputSchema`.
 - Tests sit next to the code as `*.test.ts`. Cover chess rules in unit tests and drive tools end to end
   through `app.request('/mcp', …)`.
